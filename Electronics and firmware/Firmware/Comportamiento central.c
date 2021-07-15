@@ -1,3 +1,9 @@
+/*
+ * Comportamiento central.c
+ *
+ * Created: 06/07/2021 19:38:21
+ * Author : xDzohlx
+ */ 
 
 #define F_CPU 20000000UL //Frecuencia del cpu 20 MHz
 #include <avr/io.h>
@@ -7,15 +13,19 @@
 int cont = 0;//Contador de canal
 int contadc = 0;//Contador de sensores
 volatile uint16_t VALORADC = 0x0000;
-volatile uint16_t canal[6];
+volatile uint16_t canal[6];//valor de canal de 4000 hasta 8000
 volatile uint16_t sensor[16];
+volatile uint16_t motor[1];
 bool lectura = false;
 
 void setup(void){
-	//configuracion de puertos
+	//Configuracion de CLKPER para fuente de reloj de varios perifericos
 	ccp_write_io((void *) & (CLKCTRL.MCLKCTRLB), (CLKCTRL_PDIV_2X_gc|CLKCTRL_PEN_bm));//Maxima frecuencia de lectura de pwm
-	PORTA.DIRSET = PIN0_bm|PIN1_bm;//|PIN2_bm|PIN3_bm|PIN4_bm|PIN5_bm|PIN6_bm|PIN7_bm;//dirección de entrada en este caso es de salida
-
+	
+	//configuracion de puertos
+	PORTA.DIRSET = PIN0_bm|PIN2_bm|PIN4_bm;//|PIN4_bm|PIN5_bm|PIN6_bm|PIN7_bm;//dirección de entrada en este caso es de salida
+	
+	//Configuracion de TCA para salida de motores
 	TCB0.CTRLA |= TCB_ENABLE_bm|TCB_CLKSEL_CLKDIV2_gc;//ACTIVACION DE EVENTOS RELOJ PROVIENE DE TCA A 1MHZ //clkper 
 	TCB0.CTRLB |= TCB_CNTMODE_FRQ_gc;//modo de lectura de frecuencia
 	TCB0.EVCTRL |= TCB_CAPTEI_bm|TCB_EDGE_bm;//ACTIVA CAPTURA DE EVENTOS, EDGE es el sentido del pulso en este caso esta inverso
@@ -38,16 +48,27 @@ void setup(void){
 
 	//timer TCA
 	TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV1_gc;//fuente de reloj,
-	TCA0.SINGLE.PER = 0x07DF;//Selección de resolucion de pwm y periodo total de pwm
-	TCA0.SINGLE.CTRLB |= TCA_SINGLE_CMP1EN_bm|TCA_SINGLE_CMP0EN_bm|TCA_SINGLE_WGMODE_SINGLESLOPE_gc;//Habilitar comparador y seleccion de modo de de generacion de onda con modo de rampa sensilla
+	TCA0.SINGLE.PER = 0x07EF;//Selección de resolucion de pwm y periodo total de pwm
+	TCA0.SINGLE.CTRLB |= TCA_SINGLE_CMP2_bm|TCA_SINGLE_CMP0EN_bm|TCA_SINGLE_WGMODE_SINGLESLOPE_gc;//Habilitar comparador y seleccion de modo de de generacion de onda con modo de rampa sensilla
 	TCA0.SINGLE.CMP0 = 0x3E0;//registro de 16 bits para comparacion y pediodo de pwm
-	TCA0.SINGLE.CMP1 = 0x07D0;
+	TCA0.SINGLE.CMP2 = 0x3E0;
 	TCA0.SINGLE.CTRLA |= TCA_SINGLE_ENABLE_bm;//Habilitar pwm
+
+	//configuracion de vector de interrupcion
+	CPUINT.LVL0PRI = ADC0_RESRDY_vect_num;
+	CPUINT.LVL1VEC = TCB0_INT_vect_num;	
+	//Habilitar interrupciones generales
 	sei();
 }
 ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
 if (cont > 0)// lectura del canal no es necesario para decodificador
 	canal[cont -1]=TCB0.CCMP;//lectura del canal no necesario para salida decodificada
+	if (cont==2){
+		PORTA.OUTSET = PIN4_bm;
+	}
+	if (cont==3){
+		PORTA.OUTCLR = PIN4_bm;
+	}
 cont++;//siguiente canal
 if (canal[cont-2]>16000)
 	cont = 0;
@@ -69,11 +90,11 @@ ADC0.MUXPOS = contadc;
 int main(void){
 	setup();
 	while (1){
-		if(canal[2]>6000){
-			TCA0.SINGLE.CMP0 = 0x7DE;
-			}else{
-			TCA0.SINGLE.CMP0 = 0x005;
-		}
-		
+//valor de canal de 4000 a 8000
+//motores aceptan valores de 1000 a 2000 punto medio de 1500
+motor[0] = (canal[0]>>2);
+motor[1] = (canal[1]>>2);
+TCA0.SINGLE.CMP0 = motor[0];
+TCA0.SINGLE.CMP2 = motor[1];
 	}
 }
