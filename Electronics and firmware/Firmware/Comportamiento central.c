@@ -4,14 +4,18 @@
  * Created: 06/07/2021 19:38:21
  * Author : xDzohlx
  */ 
+#define F_CPU 16000000UL //Frecuencia del cpu 16 MHz
+#define P 1
+#define D 1
 
-#define F_CPU 20000000UL //Frecuencia del cpu 20 MHz
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/cpufunc.h>
 #include <stdbool.h>
 int cont = 0;//Contador de canal
 int contadc = 0;//Contador de sensores
+volatile uint16_t Controlador_D = 0x0000;
+volatile uint16_t Controlador_P = 0x0000;
 volatile uint16_t VALORADC = 0x0000;
 volatile uint16_t canal[6];//valor de canal de 4000 hasta 8000
 volatile uint16_t sensor[16];
@@ -23,7 +27,7 @@ void setup(void){
 	ccp_write_io((void *) & (CLKCTRL.MCLKCTRLB), (CLKCTRL_PDIV_2X_gc|CLKCTRL_PEN_bm));//Maxima frecuencia de lectura de pwm
 	
 	//configuracion de puertos
-	PORTA.DIRSET = PIN0_bm|PIN2_bm|PIN4_bm;//|PIN4_bm|PIN5_bm|PIN6_bm|PIN7_bm;//dirección de entrada en este caso es de salida
+	PORTA.DIRSET = PIN0_bm|PIN2_bm|PIN3_bm|PIN4_bm;//|PIN4_bm|PIN5_bm|PIN6_bm|PIN7_bm;//dirección de entrada en este caso es de salida
 	
 	//Configuracion de TCA para salida de motores
 	TCB0.CTRLA |= TCB_ENABLE_bm|TCB_CLKSEL_CLKDIV2_gc;//ACTIVACION DE EVENTOS RELOJ PROVIENE DE TCA A 1MHZ //clkper 
@@ -83,7 +87,7 @@ ISR(ADC0_RESRDY_vect){
 	}
 if (contadc>= 16){
 	contadc = 0;
-	
+	lectura = true;
 	}
 ADC0.MUXPOS = contadc;
 }
@@ -92,9 +96,38 @@ int main(void){
 	while (1){
 //valor de canal de 4000 a 8000
 //motores aceptan valores de 1000 a 2000 punto medio de 1500
-motor[0] = (canal[0]>>2);
-motor[1] = (canal[1]>>2);
-TCA0.SINGLE.CMP0 = motor[0];
-TCA0.SINGLE.CMP2 = motor[1];
+//ajuste de señal de lectura para señal de motores
+//salida de motores
+if(canal[4]<6000&&canal[0]>7000&&canal[1]>7000&&canal[0]<5000&&canal[1]<5000){//Controlador encendido y seguros de funcionamiento
+	motor[0] = (canal[0]>>2);//division entre 4 para ajustar la resolucion
+	motor[1] = (canal[1]>>2);
+	//validaciones
+	//Lado izquierdo
+	if ((sensor[1]-sensor[6])>250){
+		Controlador_P = sensor[1];
 	}
+	if ((sensor[2]-sensor[13])>250){
+		Controlador_P = sensor[2];
+	}
+	if ((sensor[0]-sensor[7])>250){
+	}
+	//Lado derecho
+	if ((sensor[12]-sensor[3])>250){
+		Controlador_P = sensor[12];
+	}
+	if ((sensor[5]-sensor[3])>350){
+		Controlador_P = sensor[5];
+	}
+	if ((sensor[4]-sensor[14])>250){
+		Controlador_P = sensor[4];
+	}
+TCA0.SINGLE.CMP0 = motor[0] + Controlador_P*P + Controlador_D*D;
+TCA0.SINGLE.CMP2 = motor[1] - Controlador_P*P - Controlador_D*D;
+}else{//Controlador apagado
+	motor[0] = (canal[0]>>2);
+	motor[1] = (canal[1]>>2);
+	TCA0.SINGLE.CMP0 = motor[0];
+	TCA0.SINGLE.CMP2 = motor[1];
 }
+}//while(1)
+}//main
