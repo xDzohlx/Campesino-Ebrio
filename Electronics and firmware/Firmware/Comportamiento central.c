@@ -4,27 +4,56 @@
  * Created: 06/07/2021 19:38:21
  * Author : xDzohlx
  */ 
+
 #define F_CPU 16000000UL //Frecuencia del cpu 16 MHz
 #define P 1
 #define D 1
+#define acelerador 1
+#define volante 0
+#define arma 3
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/cpufunc.h>
 #include <stdbool.h>
+#include <util/delay.h>
 int cont = 0;//Contador de canal
 int contadc = 0;//Contador de sensores
+int contcal = 0;//contador de calibracion
+
 volatile uint16_t Controlador_D = 0x0000;
 volatile uint16_t Controlador_P = 0x0000;
 volatile uint16_t VALORADC = 0x0000;
-volatile uint16_t canal[6];//valor de canal de 4000 hasta 8000
+volatile uint16_t canal[7];//valor de canal de 4000 hasta 8000
+uint16_t canalcal[1][7];//vectores de calibracion
 volatile uint16_t sensor[16];
 volatile uint16_t motor[1];
+volatile uint16_t canaloffset[1];
 bool lectura = false;
+bool lectura_canal = false;
+bool calibracion = false;
 
+void offsetsignals(){//etapa de autocalibracion por promedio, pequeño filtro digital
+
+while (!lectura_canal&&canal[acelerador]<6500&&canal[acelerador]>5500&&canal[volante]<6500&&canal[volante]>5500){//Seguridad
+}
+_delay_ms(500);
+	for (int i = 0;i<7;i++){
+		_delay_ms(20);
+		canalcal[volante][i] = canal[volante];
+		canalcal[acelerador][i] = canal[acelerador];
+	}
+	for(int i = 0;i<7;i++){
+		canaloffset[volante] += canalcal[volante][i];
+		canaloffset[acelerador] +=canalcal[acelerador][i];	
+	}
+	canaloffset[volante] = (canaloffset[volante]>>3);//division entre 8
+	canaloffset[acelerador] = (canaloffset[acelerador]>>3);
+}
 void setup(void){
+	
 	//Configuracion de CLKPER para fuente de reloj de varios perifericos
-	ccp_write_io((void *) & (CLKCTRL.MCLKCTRLB), (CLKCTRL_PDIV_2X_gc|CLKCTRL_PEN_bm));//Maxima frecuencia de lectura de pwm
+	ccp_write_io((void *) & (CLKCTRL.MCLKCTRLB), (CLKCTRL_PDIV_2X_gc|CLKCTRL_PEN_bm));//Maxima frecuencia de lectura de pwm en señal de reloj per
 	
 	//configuracion de puertos
 	PORTA.DIRSET = PIN0_bm|PIN2_bm|PIN3_bm|PIN4_bm;//|PIN4_bm|PIN5_bm|PIN6_bm|PIN7_bm;//dirección de entrada en este caso es de salida
@@ -63,6 +92,7 @@ void setup(void){
 	CPUINT.LVL1VEC = TCB0_INT_vect_num;	
 	//Habilitar interrupciones generales
 	sei();
+	offsetsignals();
 }
 ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
 if (cont > 0)// lectura del canal no es necesario para decodificador
@@ -76,15 +106,13 @@ if (cont > 0)// lectura del canal no es necesario para decodificador
 cont++;//siguiente canal
 if (canal[cont-2]>16000)
 	cont = 0;
+	lectura_canal = true;
 }
 //Interrupción de lectura de ADC para sensores
-ISR(ADC0_RESRDY_vect){
+ISR(ADC0_RESRDY_vect){//solo 4 sensores para empezar
 //Canales de 0 al 7 despues a partir del 12 hasta sensor 14
 	sensor[contadc-1] = ADC0.RES;
 	contadc++;
-	if (contadc== 9){
-		contadc = 12;
-	}
 if (contadc>= 16){
 	contadc = 0;
 	lectura = true;
@@ -94,37 +122,15 @@ ADC0.MUXPOS = contadc;
 int main(void){
 	setup();
 	while (1){
-//valor de canal de 4000 a 8000
+//valor de canal de 4000 a 8000 con 6000 de punto medio
 //motores aceptan valores de 1000 a 2000 punto medio de 1500
 //ajuste de señal de lectura para señal de motores
 //salida de motores
-if(canal[4]<6000&&canal[0]>7000&&canal[1]>7000&&canal[0]<5000&&canal[1]<5000){//Controlador encendido y seguros de funcionamiento
-	motor[0] = (canal[0]>>2);//division entre 4 para ajustar la resolucion
-	motor[1] = (canal[1]>>2);
-	//validaciones
-	//Lado izquierdo
-	if ((sensor[1]-sensor[6])>250){
-		Controlador_P = sensor[1];
-	}
-	if ((sensor[2]-sensor[13])>250){
-		Controlador_P = sensor[2];
-	}
-	if ((sensor[0]-sensor[7])>250){
-	}
-	//Lado derecho
-	if ((sensor[12]-sensor[3])>250){
-		Controlador_P = sensor[12];
-	}
-	if ((sensor[5]-sensor[3])>350){
-		Controlador_P = sensor[5];
-	}
-	if ((sensor[4]-sensor[14])>250){
-		Controlador_P = sensor[4];
-	}
+if(1){
 TCA0.SINGLE.CMP0 = motor[0] + Controlador_P*P + Controlador_D*D;
 TCA0.SINGLE.CMP2 = motor[1] - Controlador_P*P - Controlador_D*D;
 }else{//Controlador apagado
-	motor[0] = (canal[0]>>2);
+	motor[0] = (canal[0]>>2);// resolucion de 10 bits
 	motor[1] = (canal[1]>>2);
 	TCA0.SINGLE.CMP0 = motor[0];
 	TCA0.SINGLE.CMP2 = motor[1];
