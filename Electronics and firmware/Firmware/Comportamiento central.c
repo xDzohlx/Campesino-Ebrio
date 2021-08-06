@@ -41,7 +41,7 @@ void offsetsignals(){//etapa de autocalibracion por promedio, pequeño filtro di
 
 while (!lectura_canal&&canal[acelerador]<6500&&canal[acelerador]>5500&&canal[volante]<6500&&canal[volante]>5500){//Seguridad
 }
-_delay_ms(500);
+_delay_ms(1000);
 	for (int i = 0;i<8;i++){
 		_delay_ms(20);
 		canalcal[volante][i] = canal[volante];
@@ -146,13 +146,27 @@ int main(void){
 
 if(canal[4]>6000){//mezcladora con el sentido del robot
 	PORTA.OUTCLR = PIN3_bm;// led prendido
-	canalcontrol[0] =
-	motor[0] = (canal[acelerador]  +)>>2;//Normal
-	motor[1] =  (canal[acelerador]-(((canaloffset[volante])-canal[volante])>>1))>>2;
+if (canal[volante]>=canaloffset[volante]){
+canalcontrol[volante] = ((canal[volante]-canaloffset[volante])>>1);
+	motor[0] = (canal[acelerador]-canalcontrol[volante] )>>2;//reversa, solo al acelerador
+	motor[1] =  (canal[acelerador]+canalcontrol[volante] )>>2;
+}else{
+canalcontrol[volante] = (canaloffset[volante]-canal[volante])>>1;
+		motor[0] = (canal[acelerador]+canalcontrol[volante] )>>2;//reversa, solo al acelerador
+	motor[1] =  (canal[acelerador]-canalcontrol[volante] )>>2;
+}//((canal[volante]-canaloffset[volante])>>1)
 	}else{
 	PORTA.OUTSET = PIN3_bm;//led apagado
-	motor[0] = (((canaloffset[acelerador]<<1)-canal[acelerador])+(((canaloffset[volante])-canal[volante])>>1))>>2;//reversa, solo al acelerador
-	motor[1] =  (((canaloffset[acelerador]<<1)-canal[acelerador])-(((canaloffset[volante])-canal[volante])>>1))>>2;
+	if (canal[volante]>=canaloffset[volante]){
+	canalcontrol[volante] = ((canal[volante]-canaloffset[volante])>>1);
+	motor[0] = (((canaloffset[acelerador]<<1)-canal[acelerador])-canalcontrol[volante] )>>2;//reversa, solo al acelerador
+	motor[1] =  (((canaloffset[acelerador]<<1)-canal[acelerador])+canalcontrol[volante] )>>2;
+	}else{
+	canalcontrol[volante] = (canaloffset[volante]-canal[volante])>>1;
+		motor[0] = (((canaloffset[acelerador]<<1)-canal[acelerador])+canalcontrol[volante] )>>2;//reversa, solo al acelerador
+	motor[1] =  (((canaloffset[acelerador]<<1)-canal[acelerador])-canalcontrol[volante] )>>2;
+	}//((canal[volante]-canaloffset[volante])>>1)
+
 }
 //motor[izquierdo] = (motor[izquierdo]>>2);// resolucion de 10 bits
 //motor[derecho] = (motor[derecho]>>2);
