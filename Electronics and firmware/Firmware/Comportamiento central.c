@@ -13,6 +13,7 @@
 #define arma 3
 #define izquierdo 0
 #define derecho 1
+#define sensor_reversa 4
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -135,7 +136,7 @@ ISR(ADC0_RESRDY_vect){//solo 4 sensores para empezar
 //Canales de 0 al 7 despues a partir del 12 hasta sensor 14
 	sensor[contadc-1] = ADC0.RES;
 	contadc++;
-if (contadc>= 16){
+if (contadc>= 8){
 	contadc = 0;
 	lectura = true;
 	}
@@ -147,23 +148,15 @@ int main(void){
 //valor de canal de 4000 a 8000 con 6000 de punto medio
 //motores aceptan valores de 1000 a 2000 punto medio de 1500	
 
-	if (PORTA.IN & PIN6_bm){
-		previousmillis = millis;
-		if (millis-currentMillis>100){
-			reversa = true;
-			PORTA.OUTCLR = PIN3_bm;// led prendido
-		}
+	if (sensor[sensor_reversa]>900){
+		reversa = false;
+		PORTA.OUTSET = PIN3_bm;// led prendido
 	}else{
-		currentMillis = millis;
-	
-		if (millis-previousmillis>100){
-			reversa = false;PORTA.OUTSET = PIN3_bm;//led apagado
-		}
+		PORTA.OUTCLR = PIN3_bm;// led prendido
+		reversa = true;
 	}
 
-
-
-	if(!reversa){//reversa con sensor, se necesitan dos sensores al parecer	
+	if(reversa){//reversa con sensor, se necesitan dos sensores al parecer	
 	//PORTA.OUTCLR = PIN3_bm;// led prendido
 	if (canal[volante]>=canaloffset[volante]){
 		canalcontrol[volante] = ((canal[volante]-canaloffset[volante])>>1);//mezcladora
