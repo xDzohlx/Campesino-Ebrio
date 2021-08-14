@@ -3,10 +3,14 @@
  *
  * Created: 06/07/2021 19:38:21
  * Author : xDzohlx
+ * Condiciones de prueba
+ * Robot: El campesino ebrio V3
+ * Bateria 3s 1000mah
+ * Probado sin arma
  */ 
 
 #define F_CPU 16000000UL //Frecuencia del cpu 16 MHz
-#define P 0//Controladores apagados
+#define P 0.1
 #define D 0
 #define acelerador 1
 #define volante 0
@@ -24,19 +28,22 @@ int cont = 0;//Contador de canal
 int contadc = 0;//Contador de sensores
 int contcal = 0;//contador de calibracion
 
-volatile uint16_t Controlador_D = 0x0000;
-volatile uint16_t Controlador_P = 0x0000;
+uint16_t Controlador_D[2] ;
+uint16_t Controlador_P[2] ;
 volatile uint16_t VALORADC = 0x0000;
 volatile uint16_t canal[7];//valor de canal de 4000 hasta 8000
 uint16_t canalcal[3][7];//vectores de calibracion
+uint16_t sensorcal[3][7];
 volatile uint16_t canalcontrol[2];
 volatile uint16_t sensor[16];
 volatile uint16_t motor[2];//motor 0 izquid, motor 1 derecho
-volatile uint16_t canaloffset[2];
+uint16_t canaloffset[2];
+uint16_t sensoroffset[8];
 unsigned long millis = 0;
 unsigned long previousmillis;
 unsigned long currentMillis ;
 uint8_t contfiltro = 0x00;
+uint8_t numsensor = 0;
 bool lectura = false;
 bool lectura_canal = false;
 bool calibracion = false;
@@ -51,14 +58,19 @@ _delay_ms(1000);
 	_delay_ms(20);
 	canalcal[volante][i] = canal[volante];
 	canalcal[acelerador][i] = canal[acelerador];
+	sensorcal[0][i] = sensor[0];
+	sensorcal[1][i] = sensor[1];
 	}
 	for(int i = 0;i<8;i++){//suma de los valores
 	canaloffset[volante] += canalcal[volante][i];
 	canaloffset[acelerador] += canalcal[acelerador][i];	
+	sensoroffset[0] += sensorcal[0][1];
+	sensoroffset[1] += sensorcal[1][1];	
 	}
 	canaloffset[volante] = (canaloffset[volante]>>3);//division del promedio
 	canaloffset[acelerador] = (canaloffset[acelerador]>>3);
-
+	sensoroffset[0] = sensoroffset[0]>>3;
+	sensoroffset[1] = sensoroffset[0]>>3;
 }
 void setup(void){
 	
@@ -150,34 +162,55 @@ int main(void){
 
 	if (sensor[sensor_reversa]>900){
 		reversa = false;
-		PORTA.OUTSET = PIN3_bm;// led prendido
+		//PORTA.OUTSET = PIN3_bm;// led prendido
 	}else{
-		PORTA.OUTCLR = PIN3_bm;// led prendido
+		//PORTA.OUTCLR = PIN3_bm;// led prendido
 		reversa = true;
 	}
-
-	if(reversa){//reversa con sensor, se necesitan dos sensores al parecer	
-	//PORTA.OUTCLR = PIN3_bm;// led prendido
-	if (canal[volante]>=canaloffset[volante]){
-		canalcontrol[volante] = ((canal[volante]-canaloffset[volante])>>1);//mezcladora
-		motor[0] = (canal[acelerador]-canalcontrol[volante] )>>2;
-		motor[1] = (canal[acelerador]+canalcontrol[volante] )>>2;
+	//if (sensor[0]>250){//sensor derecho
+		//PORTA.OUTSET = PIN3_bm;// led prendido
+		//}
+	//if (sensor[1]>250)//sensor izquierdo
+	//{
+	//}
+	if (canal[4]>6000&&canal[acelerador]<6400&&canal[acelerador]>5500){
+		PORTA.OUTCLR = PIN3_bm;// led prendido
+			Controlador_P[0] = (sensor[1]-sensoroffset[1]);//derecho
+			Controlador_P[1] = (sensor[0]-sensoroffset[0]);//izquierda
 	}else{
-		canalcontrol[volante] = (canaloffset[volante]-canal[volante])>>1;//mezcladora
-		motor[0] = (canal[acelerador]+canalcontrol[volante] )>>2;
-		motor[1] = (canal[acelerador]-canalcontrol[volante] )>>2;
+		PORTA.OUTSET = PIN3_bm;// led prendido
+		Controlador_P[0] = 0;
+		Controlador_P[1] = 0;
+	}
+	
+	if(1){//reversa con sensor, se necesitan dos sensores al parecer	
+	//PORTA.OUTCLR = PIN3_bm;// led prendido
+	
+	if (canal[volante]>=canaloffset[volante]){
+	canalcontrol[volante] = ((canal[volante]-canaloffset[volante])>>1);//mezcladora
+	motor[izquierdo] = (canal[acelerador]-canalcontrol[volante] - Controlador_P[1] + Controlador_P[0])>>2;
+	motor[derecho] = (canal[acelerador]+canalcontrol[volante] - Controlador_P[0] + Controlador_P[1])>>2;
+	}else{
+	canalcontrol[volante] = (canaloffset[volante]-canal[volante])>>1;//mezcladora
+	motor[izquierdo] = (canal[acelerador]+canalcontrol[volante] - Controlador_P[1] + Controlador_P[0])>>2;
+	motor[derecho] = (canal[acelerador]-canalcontrol[volante] - Controlador_P[0] + Controlador_P[1])>>2;
 	}}else{//Normal
 	//PORTA.OUTSET = PIN3_bm;//led apagado
 	if (canal[volante]>=canaloffset[volante]){
 	canalcontrol[volante] = ((canal[volante]-canaloffset[volante])>>1);//mezcladora
-	motor[0] = (((canaloffset[acelerador]<<1)-canal[acelerador])-canalcontrol[volante] )>>2;//reversa, solo al acelerador
-	motor[1] = (((canaloffset[acelerador]<<1)-canal[acelerador])+canalcontrol[volante] )>>2;
+	motor[izquierdo] = (((canaloffset[acelerador]<<1)-canal[acelerador])-canalcontrol[volante]- Controlador_P[1] + Controlador_P[0])>>2;//reversa, solo al acelerador
+	motor[derecho] = (((canaloffset[acelerador]<<1)-canal[acelerador])+canalcontrol[volante] - Controlador_P[0] + Controlador_P[1] )>>2;
 	}else{
 	canalcontrol[volante] = (canaloffset[volante]-canal[volante])>>1;//mezcladora
-	motor[0] = (((canaloffset[acelerador]<<1)-canal[acelerador])+canalcontrol[volante] )>>2;//reversa, solo al acelerador
-	motor[1] = (((canaloffset[acelerador]<<1)-canal[acelerador])-canalcontrol[volante] )>>2;
+	motor[izquierdo] = (((canaloffset[acelerador]<<1)-canal[acelerador])+canalcontrol[volante] - Controlador_P[1] + Controlador_P[0])>>2;//reversa, solo al acelerador
+	motor[derecho] = (((canaloffset[acelerador]<<1)-canal[acelerador])-canalcontrol[volante] - Controlador_P[0] + Controlador_P[1])>>2;
 	}}
-
+	if (motor[izquierdo]>0x07E0){//SATURACION DE MOTORES
+		motor[izquierdo] = 0x07E0;
+	}
+	if (motor[derecho]>0x07E0){
+		motor[derecho] = 0x07E0;
+	}
 	TCA0.SINGLE.CMP0 = motor[izquierdo];
 	TCA0.SINGLE.CMP2 = motor[derecho];
 	
