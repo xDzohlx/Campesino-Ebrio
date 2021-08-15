@@ -10,8 +10,9 @@
  */ 
 
 #define F_CPU 16000000UL //Frecuencia del cpu 16 MHz
-#define P 0.1
-#define D 0
+#define P 300
+#define I 1
+#define D 1
 #define acelerador 1
 #define volante 0
 #define arma 3
@@ -32,8 +33,8 @@ uint16_t Controlador_D[2] ;
 uint16_t Controlador_P[2] ;
 volatile uint16_t VALORADC = 0x0000;
 volatile uint16_t canal[7];//valor de canal de 4000 hasta 8000
-uint16_t canalcal[3][7];//vectores de calibracion
-uint16_t sensorcal[3][7];
+//uint16_t canalcal[3][7];//vectores de calibracion
+//uint16_t sensorcal[3][7];
 volatile uint16_t canalcontrol[2];
 volatile uint16_t sensor[16];
 volatile uint16_t motor[2];//motor 0 izquid, motor 1 derecho
@@ -44,6 +45,10 @@ unsigned long previousmillis;
 unsigned long currentMillis ;
 uint8_t contfiltro = 0x00;
 uint8_t numsensor = 0;
+uint8_t autonomia = 0;
+//0 manual
+//1 asistido,semiautonomo
+//2 autonomo
 bool lectura = false;
 bool lectura_canal = false;
 bool calibracion = false;
@@ -56,21 +61,11 @@ while (!lectura_canal&&canal[acelerador]<6500&&canal[acelerador]>5500&&canal[vol
 _delay_ms(1000);
 	for (int i = 0;i<8;i++){//adquisición de señales, 8 valores en total
 	_delay_ms(20);
-	canalcal[volante][i] = canal[volante];
-	canalcal[acelerador][i] = canal[acelerador];
-	sensorcal[0][i] = sensor[0];
-	sensorcal[1][i] = sensor[1];
-	}
-	for(int i = 0;i<8;i++){//suma de los valores
-	canaloffset[volante] += canalcal[volante][i];
-	canaloffset[acelerador] += canalcal[acelerador][i];	
-	sensoroffset[0] += sensorcal[0][1];
-	sensoroffset[1] += sensorcal[1][1];	
+	canaloffset[volante] += canal[volante];
+	canaloffset[acelerador] += canal[acelerador];
 	}
 	canaloffset[volante] = (canaloffset[volante]>>3);//division del promedio
-	canaloffset[acelerador] = (canaloffset[acelerador]>>3);
-	sensoroffset[0] = sensoroffset[0]>>3;
-	sensoroffset[1] = sensoroffset[0]>>3;
+	canaloffset[acelerador] = (canaloffset[acelerador]>>3); 
 }
 void setup(void){
 	
@@ -112,7 +107,7 @@ void setup(void){
 	ADC0.CTRLD |= ADC_INITDLY_DLY16_gc;//CONFIGURACION DEL RELOJ DEL ADC
 	//Canales de 0 al 7 despues a partir del 12 o 0x0C
 	ADC0.MUXPOS = 0x00;//SELECCION DE CANAL DE ADC PD1
-	ADC0.INTCTRL |= ADC_RESRDY_bm;//Habilitar interrupciones de resultado completo
+	ADC0.INTCTRL |= ADC_RESRDY_bm;//|ADC_WCMP_bm;//Habilitar interrupciones de resultado completo
 	//ADC0.INTCTRL |= ADC_WCMP_bm;
 	ADC0.CTRLA |= ADC_ENABLE_bm;//ENCENDIDO DE ADC
 	ADC0.COMMAND |= ADC_STCONV_bm;//INICIO DE MUESTRAS
@@ -154,6 +149,9 @@ if (contadc>= 8){
 	}
 ADC0.MUXPOS = contadc;
 }
+//ISR	(ADC0_WCOMP_vect){
+	//
+//}
 int main(void){
 	setup();
 	while (1){
@@ -162,30 +160,27 @@ int main(void){
 
 	if (sensor[sensor_reversa]>900){
 		reversa = false;
-		//PORTA.OUTSET = PIN3_bm;// led prendido
+		//PORTA.OUTSET = PIN3_bm;// led apagado
 	}else{
 		//PORTA.OUTCLR = PIN3_bm;// led prendido
 		reversa = true;
 	}
-	//if (sensor[0]>250){//sensor derecho
-		//PORTA.OUTSET = PIN3_bm;// led prendido
-		//}
-	//if (sensor[1]>250)//sensor izquierdo
-	//{
-	//}
+
+	
+
 	if (canal[4]>6000&&canal[acelerador]<6400&&canal[acelerador]>5500){
 		PORTA.OUTCLR = PIN3_bm;// led prendido
-			Controlador_P[0] = (sensor[1]-sensoroffset[1]);//derecho
-			Controlador_P[1] = (sensor[0]-sensoroffset[0]);//izquierda
-	}else{
-		PORTA.OUTSET = PIN3_bm;// led prendido
+		Controlador_P[0] = (sensor[1]-sensoroffset[1])>>2;//derecho
+		Controlador_P[1] = (sensor[0]-sensoroffset[0])>>2;//izquierda
+		}else{
+		PORTA.OUTSET = PIN3_bm;// led apagado
 		Controlador_P[0] = 0;
 		Controlador_P[1] = 0;
+		reversa = true;
 	}
 	
-	if(1){//reversa con sensor, se necesitan dos sensores al parecer	
+	if(reversa){//reversa con sensor, se necesitan dos sensores al parecer	
 	//PORTA.OUTCLR = PIN3_bm;// led prendido
-	
 	if (canal[volante]>=canaloffset[volante]){
 	canalcontrol[volante] = ((canal[volante]-canaloffset[volante])>>1);//mezcladora
 	motor[izquierdo] = (canal[acelerador]-canalcontrol[volante] - Controlador_P[1] + Controlador_P[0])>>2;
