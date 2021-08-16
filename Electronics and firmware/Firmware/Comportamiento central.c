@@ -111,47 +111,42 @@ void setup(void){
 	//ADC0.INTCTRL |= ADC_WCMP_bm;
 	ADC0.CTRLA |= ADC_ENABLE_bm;//ENCENDIDO DE ADC
 	ADC0.COMMAND |= ADC_STCONV_bm;//INICIO DE MUESTRAS
-
-	//configuracion de vector de interrupcion
+	//RTC Reloj de tiempo real
+	while((RTC.STATUS > 0x00 )){}//se checa que no se este uitilizando	el RTC
+		RTC.PER = 511;
+		//RTC.CMP = 5;
+		RTC.CLKSEL = RTC_CLKSEL_INT32K_gc;
+		RTC.DBGCTRL |= RTC_DBGRUN_bm;
+		RTC.CTRLA = RTC_PRESCALER_DIV32_gc  /* 32 */
+		| RTC_RTCEN_bm            /* Enable: enabled */
+		| RTC_RUNSTDBY_bm;
+		RTC.INTCTRL |= RTC_OVF_bm;//|RTC_CMP_bm;
+	//COnfiguracion de prioridad de interrupciones
 	CPUINT.LVL0PRI = ADC0_RESRDY_vect_num;
-	CPUINT.LVL1VEC = TCB0_INT_vect_num;	
+	CPUINT.LVL1VEC = TCB0_INT_vect_num;
 	//Habilitar interrupciones generales
 	sei();
 	
-	offsetsignals();// se obtiene el offset por promedio, de 8 valores por comodidad
-}
-ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
-if (cont > 0)// lectura del canal no es necesario para decodificador
-	canal[cont -1]=TCB0.CCMP;//lectura del canal no necesario para salida decodificada
-	if (cont==2){
-		PORTA.OUTSET = PIN4_bm;
+		offsetsignals();// se obtiene el offset por promedio, de 8 valores por comodidad
 	}
-	if (cont==3){
-		PORTA.OUTCLR = PIN4_bm;
+	//Interrupción de lectura de ADC para sensores
+	ISR(ADC0_RESRDY_vect){//solo 4 sensores para empezar
+	//Canales de 0 al 7 despues a partir del 12 hasta sensor 14
+		sensor[contadc-1] = ADC0.RES;
+		contadc++;
+	if (contadc>= 8){
+		contadc = 0;
+		lectura = true;
+		}
+	ADC0.MUXPOS = contadc;
 	}
-cont++;//siguiente canal
-if (canal[cont-2]>16000)
-	cont = 0;
-	lectura_canal = true;
+	ISR(RTC_CNT_vect){
+		RTC.INTFLAGS = RTC_OVF_bm|RTC_CMP_bm;
+	//PORTA.OUTTGL = PIN3_bm;
 }
-ISR(TCB1_INT_vect){//contador de milisegundos
-millis++;
-TCB1.INTFLAGS &= ~TCB_CAPT_bp;
-}
-//Interrupción de lectura de ADC para sensores
-ISR(ADC0_RESRDY_vect){//solo 4 sensores para empezar
-//Canales de 0 al 7 despues a partir del 12 hasta sensor 14
-	sensor[contadc-1] = ADC0.RES;
-	contadc++;
-if (contadc>= 8){
-	contadc = 0;
-	lectura = true;
-	}
-ADC0.MUXPOS = contadc;
-}
-//ISR	(ADC0_WCOMP_vect){
-	//
-//}
+	
+
+
 int main(void){
 	setup();
 	while (1){
@@ -159,24 +154,24 @@ int main(void){
 //motores aceptan valores de 1000 a 2000 punto medio de 1500	
 
 	if (sensor[sensor_reversa]>900){
-		reversa = false;
+		reversa = true;
 		//PORTA.OUTSET = PIN3_bm;// led apagado
 	}else{
 		//PORTA.OUTCLR = PIN3_bm;// led prendido
-		reversa = true;
+		reversa = false;
 	}
-
-	
-
 	if (canal[4]>6000&&canal[acelerador]<6400&&canal[acelerador]>5500){
-		PORTA.OUTCLR = PIN3_bm;// led prendido
+		//PORTA.OUTCLR = PIN3_bm;// led prendido
 		Controlador_P[0] = (sensor[1]-sensoroffset[1])>>2;//derecho
 		Controlador_P[1] = (sensor[0]-sensoroffset[0])>>2;//izquierda
 		}else{
-		PORTA.OUTSET = PIN3_bm;// led apagado
+		//PORTA.OUTSET = PIN3_bm;// led apagado
 		Controlador_P[0] = 0;
 		Controlador_P[1] = 0;
 		reversa = true;
+	}
+	if (RTC.CNT>=511){
+		PORTA
 	}
 	
 	if(reversa){//reversa con sensor, se necesitan dos sensores al parecer	
