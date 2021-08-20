@@ -71,9 +71,16 @@ void setup(void){
 	
 	//Configuracion de CLKPER para fuente de reloj de varios perifericos
 	ccp_write_io((void *) & (CLKCTRL.MCLKCTRLB), (CLKCTRL_PDIV_2X_gc|CLKCTRL_PEN_bm));//Maxima frecuencia de lectura de pwm en señal de reloj per, 8 MHZ
-	
 	//configuracion de puertos
 	PORTA.DIRSET = PIN0_bm|PIN2_bm|PIN3_bm|PIN4_bm;//|PIN4_bm|PIN5_bm|PIN6_bm|PIN7_bm;//dirección de entrada en este caso es de salida
+	
+	//RTC Reloj de tiempo real
+		while((RTC.STATUS > 0x00 )){}//se checa que no se este uitilizando	el RTC
+		RTC.PER = 420;//Timer para apagar sistemas autonomos
+		RTC.CLKSEL = RTC_CLKSEL_INT32K_gc;
+		RTC.DBGCTRL |= RTC_DBGRUN_bm;
+		RTC.CTRLA = RTC_PRESCALER_DIV32768_gc| RTC_RTCEN_bm| RTC_RUNSTDBY_bm;
+		RTC.INTCTRL |= RTC_OVF_bm;//RTC_CMP_bm;	
 	//Configuracion de Timer
 		//timer TCA0
 	TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV1_gc;//fuente de reloj,
@@ -108,26 +115,17 @@ void setup(void){
 	//Canales de 0 al 7 despues a partir del 12 o 0x0C
 	ADC0.MUXPOS = 0x00;//SELECCION DE CANAL DE ADC PD1
 	ADC0.INTCTRL |= ADC_RESRDY_bm;//|ADC_WCMP_bm;//Habilitar interrupciones de resultado completo
-	//ADC0.INTCTRL |= ADC_WCMP_bm;
 	ADC0.CTRLA |= ADC_ENABLE_bm;//ENCENDIDO DE ADC
 	ADC0.COMMAND |= ADC_STCONV_bm;//INICIO DE MUESTRAS
-	//RTC Reloj de tiempo real
-	while((RTC.STATUS > 0x00 )){}//se checa que no se este uitilizando	el RTC
-		RTC.PER = 511;
-		//RTC.CMP = 5;
-		RTC.CLKSEL = RTC_CLKSEL_INT32K_gc;
-		RTC.DBGCTRL |= RTC_DBGRUN_bm;
-		RTC.CTRLA = RTC_PRESCALER_DIV32_gc  /* 32 */
-		| RTC_RTCEN_bm            /* Enable: enabled */
-		| RTC_RUNSTDBY_bm;
-		RTC.INTCTRL |= RTC_OVF_bm;//|RTC_CMP_bm;
+
+
 	//COnfiguracion de prioridad de interrupciones
 	CPUINT.LVL0PRI = ADC0_RESRDY_vect_num;
 	CPUINT.LVL1VEC = TCB0_INT_vect_num;
 	//Habilitar interrupciones generales
 	sei();
 	
-		offsetsignals();// se obtiene el offset por promedio, de 8 valores por comodidad
+		//offsetsignals();// se obtiene el offset por promedio, de 8 valores por comodidad
 	}
 	//Interrupción de lectura de ADC para sensores
 	ISR(ADC0_RESRDY_vect){//solo 4 sensores para empezar
@@ -141,11 +139,28 @@ void setup(void){
 	ADC0.MUXPOS = contadc;
 	}
 	ISR(RTC_CNT_vect){
+		PORTA.OUTTGL = PIN3_bm;
 		RTC.INTFLAGS = RTC_OVF_bm|RTC_CMP_bm;
-	//PORTA.OUTTGL = PIN3_bm;
-}
-	
 
+	}	
+ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
+	if (cont > 0)// lectura del canal no es necesario para decodificador
+	canal[cont -1]=TCB0.CCMP;//lectura del canal no necesario para salida decodificada
+	if (cont==2){
+		PORTA.OUTSET = PIN4_bm;
+	}
+	if (cont==3){
+		PORTA.OUTCLR = PIN4_bm;
+	}
+	cont++;//siguiente canal
+	if (canal[cont-2]>16000)
+	cont = 0;
+	lectura_canal = true;
+}
+ISR(TCB1_INT_vect){//contador de milisegundos
+	millis++;
+	TCB1.INTFLAGS &= ~TCB_CAPT_bp;
+}
 
 int main(void){
 	setup();
@@ -170,9 +185,7 @@ int main(void){
 		Controlador_P[1] = 0;
 		reversa = true;
 	}
-	if (RTC.CNT>=511){
-		PORTA
-	}
+	
 	
 	if(reversa){//reversa con sensor, se necesitan dos sensores al parecer	
 	//PORTA.OUTCLR = PIN3_bm;// led prendido
