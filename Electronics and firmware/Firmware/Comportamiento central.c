@@ -10,7 +10,7 @@
  */ 
 
 #define F_CPU 16000000UL //Frecuencia del cpu 16 MHz
-#define P 300
+#define P 1
 #define I 1
 #define D 1
 #define acelerador 1
@@ -45,7 +45,7 @@ unsigned long previousmillis;
 unsigned long currentMillis ;
 uint8_t contfiltro = 0x00;
 uint8_t numsensor = 0;
-uint8_t autonomia = 0;
+uint8_t autonomia = 0;//0 sin asistencia, 1 asistencia, 2 autonomo
 //0 manual
 //1 asistido,semiautonomo
 //2 autonomo
@@ -53,6 +53,8 @@ bool lectura = false;
 bool lectura_canal = false;
 bool calibracion = false;
 bool frente = true;
+bool asistencia = false;
+
 volatile bool reversa = false;
 void offsetsignals(){//etapa de autocalibracion por promedio, pequeño filtro digital
 
@@ -76,7 +78,7 @@ void setup(void){
 	
 	//RTC Reloj de tiempo real
 		while((RTC.STATUS > 0x00 )){}//se checa que no se este uitilizando	el RTC
-		RTC.PER = 420;//Timer para apagar sistemas autonomos
+		RTC.PER = 420;//Timer para apagar sistemas autonomos en 7 minutos
 		RTC.CLKSEL = RTC_CLKSEL_INT32K_gc;
 		RTC.DBGCTRL |= RTC_DBGRUN_bm;
 		RTC.CTRLA = RTC_PRESCALER_DIV32768_gc| RTC_RTCEN_bm| RTC_RUNSTDBY_bm;
@@ -124,8 +126,7 @@ void setup(void){
 	CPUINT.LVL1VEC = TCB0_INT_vect_num;
 	//Habilitar interrupciones generales
 	sei();
-	
-		//offsetsignals();// se obtiene el offset por promedio, de 8 valores por comodidad
+	offsetsignals();// Offset de la señales de entrada del radiocontrol
 	}
 	//Interrupción de lectura de ADC para sensores
 	ISR(ADC0_RESRDY_vect){//solo 4 sensores para empezar
@@ -138,10 +139,14 @@ void setup(void){
 		}
 	ADC0.MUXPOS = contadc;
 	}
-	ISR(RTC_CNT_vect){
-		PORTA.OUTTGL = PIN3_bm;
+	ISR(RTC_CNT_vect){//Interrupcion por tiempo seguridad
+		
+		PORTA.OUTTGL = PIN3_bm;//led de aviso
+		//Apagar motores
+			TCA0.SINGLE.CMP0 = canaloffset[acelerador];
+			TCA0.SINGLE.CMP2 = canaloffset[acelerador];
+			while(1){}//se detiene el programa
 		RTC.INTFLAGS = RTC_OVF_bm|RTC_CMP_bm;
-
 	}	
 ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
 	if (cont > 0)// lectura del canal no es necesario para decodificador
@@ -175,7 +180,9 @@ int main(void){
 		//PORTA.OUTCLR = PIN3_bm;// led prendido
 		reversa = false;
 	}
-	if (canal[4]>6000&&canal[acelerador]<6400&&canal[acelerador]>5500){
+	
+	//Sistema de asistencia
+	if asistencia==1(&&canal[acelerador]<6400&&canal[acelerador]>5500){
 		//PORTA.OUTCLR = PIN3_bm;// led prendido
 		Controlador_P[0] = (sensor[1]-sensoroffset[1])>>2;//derecho
 		Controlador_P[1] = (sensor[0]-sensoroffset[0])>>2;//izquierda
