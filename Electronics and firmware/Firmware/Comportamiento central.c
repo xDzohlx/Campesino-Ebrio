@@ -19,6 +19,11 @@
 #define izquierdo 0
 #define derecho 1
 #define sensor_reversa 4
+#define USART0_BAUD_RATE(BAUD_RATE) ((float)(F_CPU * 64 / (16 * (float)BAUD_RATE)) + 0.5)
+#define TWI0_BAUD_RATE(BAUD_RATE) ((float)(F_CPU  / (2 * (float)BAUD_RATE)) + 10 )
+#define scl PIN3_bm//PA3 ES SCL
+#define sda PIN2_bm//PA2 ES SDA
+#define device_addr 0x27
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -54,8 +59,25 @@ bool lectura_canal = false;
 bool calibracion = false;
 bool frente = true;
 bool asistencia = false;
-
 volatile bool reversa = false;
+
+
+void enviar(uint8_t dato){
+	// clear Read and Write interrupt flags
+	//if (TWI0.MSTATUS & TWI_BUSERR_bm);						// Bus Error, abort
+	TWI0.MADDR = 0x4E;//dirección con bit de escritura
+	//timeout_cnt = 0;												// reset timeout counter, will be incremented by ms tick interrupt
+	while (!(TWI0.MSTATUS & TWI_RIF_bm) && !(TWI0.MSTATUS & TWI_WIF_bm)){	// wait for RIF or WIF set
+	}
+	TWI0.MSTATUS |= (TWI_RIF_bm | TWI_WIF_bm);						// clear Read and Write interrupt flags
+	TWI0.MDATA = dato;//0b11110101
+	while (!(TWI0.MSTATUS & TWI_WIF_bm))					// wait until WIF set, status register contains ACK/NACK bit
+	{
+	}
+	TWI0.MCTRLB |= TWI_MCMD_STOP_gc;												// no error
+}
+
+
 void offsetsignals(){//etapa de autocalibracion por promedio, pequeño filtro digital
 
 while (!lectura_canal&&canal[acelerador]<6500&&canal[acelerador]>5500&&canal[volante]<6500&&canal[volante]>5500){//Seguridad
@@ -74,8 +96,18 @@ void setup(void){
 	//Configuracion de CLKPER para fuente de reloj de varios perifericos
 	ccp_write_io((void *) & (CLKCTRL.MCLKCTRLB), (CLKCTRL_PDIV_2X_gc|CLKCTRL_PEN_bm));//Maxima frecuencia de lectura de pwm en señal de reloj per, 8 MHZ
 	//configuracion de puertos
-	PORTA.DIRSET = PIN0_bm|PIN2_bm|PIN3_bm|PIN4_bm;//|PIN4_bm|PIN5_bm|PIN6_bm|PIN7_bm;//dirección de entrada en este caso es de salida
-	
+	PORTA.DIRSET = PIN0_bm|PIN1_bm|PIN2_bm|PIN3_bm;//|PIN4_bm|PIN5_bm|PIN6_bm|PIN7_bm;//dirección de entrada en este caso es de salida
+	//PORTA.OUTSET = PIN0_bm;
+	//Configuracion TWI para i2c
+	//PORTA.DIRCLR = scl;//dcl input
+	//PORTA.DIRSET = sda;//sda ouput
+	////TWI0.MBAUD = (uint16_t)TWI0_BAUD_RATE(10000000);//Generacion de baud para TWI el valor debe ser de como 100
+	//TWI0.MBAUD = 0x0A;
+	//TWI0.MCTRLB |=  TWI_FLUSH_bm;
+	//TWI0.MCTRLA |= TWI_ENABLE_bm;
+	//PORTA.DIRSET  = scl;
+	//TWI0.MSTATUS |=TWI_BUSSTATE_IDLE_gc;
+	//TWI0.MSTATUS |= (TWI_RIF_bm | TWI_WIF_bm | TWI_BUSERR_bm);
 	//RTC Reloj de tiempo real
 		while((RTC.STATUS > 0x00 )){}//se checa que no se este uitilizando	el RTC
 		RTC.PER = 420;//Timer para apagar sistemas autonomos en 7 minutos
@@ -87,15 +119,15 @@ void setup(void){
 		//timer TCA0
 	TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV1_gc;//fuente de reloj,
 	TCA0.SINGLE.PER = 0x07EF;//Selección de resolucion de pwm y periodo total de pwm
-	TCA0.SINGLE.CTRLB |= TCA_SINGLE_CMP2_bm|TCA_SINGLE_CMP0EN_bm|TCA_SINGLE_WGMODE_SINGLESLOPE_gc;//Habilitar comparador y seleccion de modo de de generacion de onda con modo de rampa sensilla
-	TCA0.SINGLE.CMP0 = 0x3E0;//registro de 16 bits para comparacion y pediodo de pwm
+	TCA0.SINGLE.CTRLB |= TCA_SINGLE_CMP2_bm|TCA_SINGLE_CMP1_bm|TCA_SINGLE_WGMODE_SINGLESLOPE_gc;//Habilitar comparador y seleccion de modo de de generacion de onda con modo de rampa sensilla TCA_SINGLE_CMP0EN_bm
+	TCA0.SINGLE.CMP1 = 0x3E0;//registro de 16 bits para comparacion y pediodo de pwm
 	TCA0.SINGLE.CMP2 = 0x3E0;
 	TCA0.SINGLE.CTRLA |= TCA_SINGLE_ENABLE_bm;//Habilitar pwm
 		//Configuracion de , para lectura de ppm
 	TCB0.CTRLA |= TCB_ENABLE_bm|TCB_CLKSEL_CLKDIV2_gc;//CLKper/2, 8 Mhz
 	TCB0.CTRLB |= TCB_CNTMODE_FRQ_gc;//modo de lectura de frecuencia
 	TCB0.EVCTRL |= TCB_CAPTEI_bm|TCB_EDGE_bm;//ACTIVA CAPTURA DE EVENTOS, EDGE es el sentido del pulso en este caso esta inverso
-	TCB0.INTCTRL |= TCB_CAPT_bm;//habilita la interrupcion
+	//TCB0.INTCTRL |= TCB_CAPT_bm;//habilita la interrupcion
 		//Configuracion de TCB1 para filtro de sensor de reversa
 	TCB1.CTRLA |= TCB_ENABLE_bm|TCB_CLKSEL_CLKDIV2_gc;//CLKper/2, 8 Mhz
 	//TCB1.CTRLB |= 0;//modo de tiempo fuera
@@ -126,7 +158,7 @@ void setup(void){
 	CPUINT.LVL1VEC = TCB0_INT_vect_num;
 	//Habilitar interrupciones generales
 	sei();
-	offsetsignals();// Offset de la señales de entrada del radiocontrol
+	//offsetsignals();// Offset de la señales de entrada del radiocontrol
 	}
 	//Interrupción de lectura de ADC para sensores
 	ISR(ADC0_RESRDY_vect){//solo 4 sensores para empezar
@@ -141,13 +173,14 @@ void setup(void){
 	}
 	ISR(RTC_CNT_vect){//Interrupcion por tiempo seguridad
 		
-		PORTA.OUTTGL = PIN3_bm;//led de aviso
+		//PORTA.OUTTGL = PIN3_bm;//led de aviso
 		//Apagar motores
 			TCA0.SINGLE.CMP0 = canaloffset[acelerador];
 			TCA0.SINGLE.CMP2 = canaloffset[acelerador];
 			while(1){}//se detiene el programa
 		RTC.INTFLAGS = RTC_OVF_bm|RTC_CMP_bm;
 	}	
+//valor de canal de 4000 a 8000 con 6000 de punto medio
 ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
 	if (cont > 0)// lectura del canal no es necesario para decodificador
 	canal[cont -1]=TCB0.CCMP;//lectura del canal no necesario para salida decodificada
@@ -162,17 +195,14 @@ ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
 	cont = 0;
 	lectura_canal = true;
 }
-ISR(TCB1_INT_vect){//contador de milisegundos
+ISR(TCB1_INT_vect){//contador de milisegundos, para generador de trayectorias	
 	millis++;
 	TCB1.INTFLAGS &= ~TCB_CAPT_bp;
 }
 
 int main(void){
 	setup();
-	while (1){
-//valor de canal de 4000 a 8000 con 6000 de punto medio
-//motores aceptan valores de 1000 a 2000 punto medio de 1500	
-
+	while (1){	
 	if (sensor[sensor_reversa]>900){
 		reversa = true;
 		//PORTA.OUTSET = PIN3_bm;// led apagado
@@ -180,9 +210,18 @@ int main(void){
 		//PORTA.OUTCLR = PIN3_bm;// led prendido
 		reversa = false;
 	}
-	
+	//Planeador de trayectorias
+	//Modos de funcionamiento automatico
+	//Busqueda y ataque
+	//Evacion
+	//Asecho
+	//TCB0.INTCTRL |= TCB_CAPT_bm;
+	//Interfaz i2c
+	//enviar(0b01100101);
+	//_delay_ms(1);
+	//enviar(0b01010101);	
 	//Sistema de asistencia
-	if asistencia==1(&&canal[acelerador]<6400&&canal[acelerador]>5500){
+	if (asistencia==1&&canal[acelerador]<6400&&canal[acelerador]>5500){
 		//PORTA.OUTCLR = PIN3_bm;// led prendido
 		Controlador_P[0] = (sensor[1]-sensoroffset[1])>>2;//derecho
 		Controlador_P[1] = (sensor[0]-sensoroffset[0])>>2;//izquierda
@@ -192,8 +231,16 @@ int main(void){
 		Controlador_P[1] = 0;
 		reversa = true;
 	}
+	//PORTA.DIRSET = PIN0_bm;
+	//
+	if (sensor[4]>600)
+	{
+		PORTA.OUTSET = PIN0_bm;
+		}else{
+		PORTA.OUTCLR = PIN0_bm;
+	}
 	
-	
+	//Sistema de assitencia manual y assistido
 	if(reversa){//reversa con sensor, se necesitan dos sensores al parecer	
 	//PORTA.OUTCLR = PIN3_bm;// led prendido
 	if (canal[volante]>=canaloffset[volante]){
@@ -215,13 +262,16 @@ int main(void){
 	motor[izquierdo] = (((canaloffset[acelerador]<<1)-canal[acelerador])+canalcontrol[volante] - Controlador_P[1] + Controlador_P[0])>>2;//reversa, solo al acelerador
 	motor[derecho] = (((canaloffset[acelerador]<<1)-canal[acelerador])-canalcontrol[volante] - Controlador_P[0] + Controlador_P[1])>>2;
 	}}
-	if (motor[izquierdo]>0x07E0){//SATURACION DE MOTORES
+	
+	//SATURACION DE MOTORES
+	if (motor[izquierdo]>0x07E0){
 		motor[izquierdo] = 0x07E0;
 	}
 	if (motor[derecho]>0x07E0){
 		motor[derecho] = 0x07E0;
 	}
-	TCA0.SINGLE.CMP0 = motor[izquierdo];
+	//motores aceptan valores de 1000 a 2000 punto medio de 1500
+	TCA0.SINGLE.CMP1 = motor[izquierdo];
 	TCA0.SINGLE.CMP2 = motor[derecho];
 	
 }//while(1)
