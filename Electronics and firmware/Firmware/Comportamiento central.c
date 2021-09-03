@@ -13,6 +13,7 @@
 	#define arma 3
 	#define izquierdo 0
 	#define derecho 1
+	#define sensor_reversa 4
 
 	#include <avr/io.h>
 	#include <avr/interrupt.h>
@@ -36,7 +37,7 @@
 	uint16_t canaloffset[2];
 	uint16_t sensoroffset[8];
 	unsigned long millis = 0;
-	unsigned long previousmillis;
+	//unsigned long previousmillis;
 	unsigned long currentMillis ;
 	uint8_t contfiltro = 0x00;
 	uint8_t numsensor = 0;
@@ -64,6 +65,14 @@
 		canaloffset[volante] = (canaloffset[volante]>>3);//division del promedio
 		canaloffset[acelerador] = (canaloffset[acelerador]>>3);
 	}
+	//generador de trayectorias, falta el parametro de velocidad mientras tanto sera fija
+	void adelante(uint8_t distancia){
+		
+	}
+	void atras(uint8_t distancia){}
+	void giro(uint8_t angulo){}
+	void arco(uint8_t distancia){}
+	
 	void setup(void){
 	
 		//Configuracion de CLKPER para fuente de reloj de varios perifericos
@@ -84,9 +93,13 @@
 		TCB0.EVCTRL |= TCB_CAPTEI_bm|TCB_EDGE_bm;//ACTIVA CAPTURA DE EVENTOS, EDGE es el sentido del pulso en este caso esta inverso
 		TCB0.INTCTRL |= TCB_CAPT_bm;
 		//TCB1.CTRLB |= 0;//modo de tiempo fuera
+		TCB1.CTRLA |= TCB_ENABLE_bm;
 		TCB1.CCMP = 0xFA0;//Valor top 4000 interrupcion cada milisegundo
-		TCB1.EVCTRL |= TCB_CAPTEI_bm;//ACTIVA CAPTURA DE EVENTOS
 		TCB1.INTCTRL |= TCB_CAPT_bm;//habilita la interrupcion	
+		//TCB1.CTRLB |= 0;//modo de tiempo fuera
+		TCB2.CTRLA |= TCB_ENABLE_bm;
+		TCB2.CCMP = 0x9C40;//Valor top 4000 interrupcion cada 10 milisegundos
+		TCB2.INTCTRL |= TCB_CAPT_bm;//habilita la interrupcion
 		//CONFIGURACION DE RED DE EVENTOS
 		//Configuracion de sistema de eventos para el radio
 		EVSYS.CHANNEL2 |= EVSYS_GENERATOR_PORT0_PIN0_gc;//PORTC3 CONECTADO A CANAL 2 para lectura de ppm
@@ -119,8 +132,8 @@
 		CPUINT.LVL1VEC = TCB0_INT_vect_num;	
 		//Habilitar interrupciones generales
 		sei();
-
 		offsetsignals();// se obtiene el offset por promedio, de 8 valores por comodidad
+		PORTA.OUTSET = PIN0_bm;//Termino la configuracion
 	}
 	ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
 	if (cont > 0)// lectura del canal no es necesario para decodificador
@@ -136,6 +149,14 @@
 		cont = 0;
 		lectura_canal = true;
 	}
+	ISR(TCB1_INT_vect){//contador de milisegundos, para generador de trayectorias
+		millis++;
+		TCB1.INTFLAGS &= ~TCB_CAPT_bp;
+	}
+	ISR(TCB2_INT_vect){//contador de milisegundos, para generador de trayectorias
+		currentMillis++;
+		TCB2.INTFLAGS &= ~TCB_CAPT_bp;
+	}
 	//Interrupción de lectura de ADC para sensores
 	ISR(ADC0_RESRDY_vect){//solo 4 sensores para empezar
 	//Canales de 0 al 7 despues a partir del 12 hasta sensor 14
@@ -147,7 +168,7 @@
 		}
 	ADC0.MUXPOS = contadc;
 	}
-		ISR(RTC_CNT_vect){//Interrupcion por tiempo seguridad
+	ISR(RTC_CNT_vect){//Interrupcion por tiempo seguridad
 		
 			PORTA.OUTTGL = PIN0_bm;//led de aviso
 			//Apagar motores
@@ -163,7 +184,11 @@
 	//motores aceptan valores de 1000 a 2000 punto medio de 1500
 	//ajuste de señal de lectura para señal de motores
 	//salida de motores
-
+	if (sensor[sensor_reversa]>900){
+	reversa = true;
+	}else{
+	reversa = false;
+	}	
 	if (asistencia==1&&canal[acelerador]<6400&&canal[acelerador]>5500){
 		//PORTA.OUTCLR = PIN3_bm;// led prendido
 		Controlador_P[0] = (sensor[1]-sensoroffset[1])>>2;//derecho
@@ -174,39 +199,34 @@
 		Controlador_P[1] = 0;
 		reversa = true;
 	}
-
-	if(reversa){//mezcladora con el sentido del robot
-		//PORTA.OUTCLR = PIN0_bm;// led prendido
-	if (canal[volante]>=canaloffset[volante]){
-	canalcontrol[volante] = ((canal[volante]-canaloffset[volante])>>1);
-		motor[0] = (canal[acelerador]-canalcontrol[volante] )>>2;//reversa, solo al acelerador
-		motor[1] =  (canal[acelerador]+canalcontrol[volante] )>>2;
-	}else{
-	canalcontrol[volante] = (canaloffset[volante]-canal[volante])>>1;
-			motor[0] = (canal[acelerador]+canalcontrol[volante] )>>2;//reversa, solo al acelerador
-		motor[1] =  (canal[acelerador]-canalcontrol[volante] )>>2;
-	}//((canal[volante]-canaloffset[volante])>>1)
-		}else{
-		//PORTA.OUTSET = PIN0_bm;//led apagado
-		if (canal[volante]>=canaloffset[volante]){
-		canalcontrol[volante] = ((canal[volante]-canaloffset[volante])>>1);
-		motor[0] = (((canaloffset[acelerador]<<1)-canal[acelerador])-canalcontrol[volante] )>>2;//reversa, solo al acelerador
-		motor[1] =  (((canaloffset[acelerador]<<1)-canal[acelerador])+canalcontrol[volante] )>>2;
-		}else{
-		canalcontrol[volante] = (canaloffset[volante]-canal[volante])>>1;
-			motor[0] = (((canaloffset[acelerador]<<1)-canal[acelerador])+canalcontrol[volante] )>>2;//reversa, solo al acelerador
-		motor[1] =  (((canaloffset[acelerador]<<1)-canal[acelerador])-canalcontrol[volante] )>>2;
-		}//((canal[volante]-canaloffset[volante])>>1)
-
-	}
-	//SATURACION DE MOTORES
-	if (motor[izquierdo]>0x07E0){
-		motor[izquierdo] = 0x07E0;
-	}
-	if (motor[derecho]>0x07E0){
-		motor[derecho] = 0x07E0;
-	}
-		TCA0.SINGLE.CMP1 = motor[0];
-		TCA0.SINGLE.CMP2 = motor[derecho];
+	
+	canalcontrol[volante] = canal[volante] + Controlador_P[0] - Controlador_P [1];
+	if(reversa){//reversa con sensor
+		if (canalcontrol[volante]>=canaloffset[volante]){
+			canalcontrol[volante] = ((canal[volante]-canaloffset[volante])>>1);//mezcladora
+			motor[izquierdo] = (canal[acelerador]-canalcontrol[volante] )>>2;
+			motor[derecho] = (canal[acelerador]+canalcontrol[volante] )>>2;
+			}else{
+			canalcontrol[volante] = (canaloffset[volante]-canal[volante])>>1;//mezcladora
+			motor[izquierdo] = (canal[acelerador]+canalcontrol[volante])>>2;
+			motor[derecho] = (canal[acelerador]-canalcontrol[volante])>>2;
+			}}else{//Normal
+			if (canalcontrol[volante]>=canaloffset[volante]){
+				canalcontrol[volante] = ((canal[volante]-canaloffset[volante])>>1);//mezcladora
+				motor[izquierdo] = (((canaloffset[acelerador]<<1)-canal[acelerador])-canalcontrol[volante])>>2;//reversa, solo al acelerador
+				motor[derecho] = (((canaloffset[acelerador]<<1)-canal[acelerador])+canalcontrol[volante])>>2;
+				}else{
+				canalcontrol[volante] = (canaloffset[volante]-canal[volante])>>1;//mezcladora
+				motor[izquierdo] = (((canaloffset[acelerador]<<1)-canal[acelerador])+canalcontrol[volante])>>2;//reversa, solo al acelerador
+				motor[derecho] = (((canaloffset[acelerador]<<1)-canal[acelerador])-canalcontrol[volante])>>2;
+			}}
+			if (motor[izquierdo]>0x07E0){//SATURACION DE MOTORES
+				motor[izquierdo] = 0x07E0;
+			}
+			if (motor[derecho]>0x07E0){
+				motor[derecho] = 0x07E0;
+			}
+			TCA0.SINGLE.CMP1 = motor[izquierdo];
+			TCA0.SINGLE.CMP2 = motor[derecho];
 	}//while(1)
 	}//main
