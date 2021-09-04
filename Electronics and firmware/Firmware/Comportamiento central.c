@@ -42,7 +42,7 @@
 	uint16_t currentmillis = 0;
 	uint8_t contfiltro = 0x00;
 	uint8_t numsensor = 0;
-	uint8_t autonomia = 0;//0 sin asistencia, 1 asistencia, 2 autonomo
+	volatile int asistencia = 0;//0 sin asistencia, 1 asistencia, 2 autonomo
 	//0 manual
 	//1 asistido,semiautonomo
 	//2 autonomo
@@ -50,7 +50,7 @@
 	bool lectura_canal = false;
 	bool calibracion = false;
 	bool frente = true;
-	int asistencia = 0;
+	
 	volatile bool reversa = false;
 
 	void offsetsignals(){//etapa de autocalibracion por promedio, pequeño filtro digital
@@ -136,6 +136,7 @@
 		automatico[volante] = canaloffset[volante];
 		automatico[acelerador] = canaloffset[acelerador];
 		PORTA.OUTSET = PIN0_bm;//Termino la configuracion
+		_delay_ms(500);//parpadeo para ver el encendido
 	}
 	ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
 	if (cont > 0)// lectura del canal no es necesario para decodificador
@@ -180,7 +181,7 @@
 		
 		if (canal[4]>7000){
 		asistencia = 2;	
-			PORTA.OUTTGL = PIN0_bm;
+			PORTA.OUTSET = PIN0_bm;
 		}
 		
 		
@@ -213,23 +214,30 @@
 	//motores aceptan valores de 1000 a 2000 punto medio de 1500
 	//ajuste de señal de lectura para señal de motores
 	//salida de motores
-	if (asistencia==1){
+	
 		//PORTA.OUTCLR = PIN3_bm;// led prendido
-		Controlador_P[0] = (sensor[1]-sensoroffset[1])>>2;//derecho
-		Controlador_P[1] = (sensor[0]-sensoroffset[0])>>2;//izquierda
-		}else{
-		//PORTA.OUTSET = PIN3_bm;// led apagado
-		Controlador_P[0] = 0;
-		Controlador_P[1] = 0;
-		reversa = true;
-	}
-	if (asistencia==2){//Seleccion de automatico
-	canalcontrol[volante] = automatico[volante];// + Controlador_P[0] - Controlador_P [1];	
-	canalcontrol[acelerador] = automatico[acelerador];
-	} else{
-	canalcontrol[volante] = canal[volante];// + Controlador_P[0] - Controlador_P [1];
-	canalcontrol[acelerador] = canal[acelerador];
-	}
+		//Controlador_P[0] = (sensor[1]-sensoroffset[1])>>2;//derecho
+		//Controlador_P[1] = (sensor[0]-sensoroffset[0])>>2;//izquierda
+		//*((uint8_t*)&(value)+1);
+		
+		Controlador_P[0] = 0;//derecho
+		Controlador_P[1] = 0;//izquierda
+
+		if (asistencia==0){
+			canalcontrol[volante] = canal[volante];// + Controlador_P[0] - Controlador_P [1];
+			canalcontrol[acelerador] = canal[acelerador];
+		}
+		if (asistencia==1){
+			canalcontrol[volante] = canal[volante] + Controlador_P[0] - Controlador_P [1];
+			canalcontrol[acelerador] = canal[acelerador];
+		}
+		if (asistencia==2){
+			canalcontrol[volante] = canaloffset[volante];
+			canalcontrol[acelerador] = canaloffset[acelerador];
+		}
+		
+					//canalcontrol[volante] = canaloffset[volante];
+					//canalcontrol[acelerador] = canaloffset[acelerador];
 		
 	if(reversa){//reversa con sensor
 		if (canalcontrol[volante]>=canaloffset[volante]){
