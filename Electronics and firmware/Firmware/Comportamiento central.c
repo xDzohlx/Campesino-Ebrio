@@ -35,21 +35,28 @@
 	volatile uint16_t sensor[16];
 	volatile uint16_t motor[2];//motor 0 izquid, motor 1 derecho
 	volatile uint16_t automatico[2];
+	
+	uint16_t controlautomatico[2];
+	uint16_t controlautomaticoprevio = 0x00;
 	uint16_t canaloffset[2];
 	uint16_t sensoroffset[8];
 	uint16_t millis = 0;
 	uint16_t previousmillis = 0;
 	uint16_t currentmillis = 0;
+	uint16_t nuevomillis = 0;
 	uint8_t contfiltro = 0x00;
 	uint8_t numsensor = 0;
-	volatile int asistencia = 0;//0 sin asistencia, 1 asistencia, 2 autonomo
+	volatile bool manual = true;//0 sin asistencia, 1 asistencia, 2 autonomo
+	volatile bool asistido = false;
+	volatile bool autonomo = false;
 	//0 manual
 	//1 asistido,semiautonomo
 	//2 autonomo
 	bool lectura = false;
 	bool lectura_canal = false;
 	bool calibracion = false;
-	bool frente = true;
+	bool primero = true;
+	bool segundo = false;
 	
 	volatile bool reversa = false;
 
@@ -67,12 +74,35 @@
 		canaloffset[acelerador] = (canaloffset[acelerador]>>3);
 	}
 	//generador de trayectorias, falta el parametro de velocidad mientras tanto sera fija
-	void adelante(uint8_t distancia){
+	//valores de 4000 a 2000
+	uint16_t adelante(uint16_t distancia){
+		if (primero){
+		millis = 0;// reiniciar temporizador
+		primero = false;
+		}
+		if (millis>=(distancia)){
+			if (controlautomatico[acelerador]<= canaloffset[acelerador]){//saturacion
+				controlautomatico[acelerador] = canaloffset[acelerador];
+			}else{
+				
+				controlautomatico[acelerador] = (canaloffset[acelerador]<<1)-millis;//rampa inversa
+			}
+		}else{
+			if (millis<=2000){//rampa positiva
+				controlautomatico[acelerador] = canaloffset[acelerador]+millis;	
+			}
+		}
+		return  controlautomatico[acelerador];
+	}
+	void atras(uint8_t distancia){
 		
 	}
-	void atras(uint8_t distancia){}
-	void giro(uint8_t angulo){}
-	void arco(uint8_t distancia){}
+	void giro(uint8_t angulo){
+		
+	}
+	void arco(uint8_t distancia){
+			
+	}
 	
 	void setup(void){
 	
@@ -133,8 +163,8 @@
 		//Habilitar interrupciones generales
 		sei();
 		offsetsignals();// se obtiene el offset por promedio, de 8 valores por comodidad
-		automatico[volante] = canaloffset[volante];
-		automatico[acelerador] = canaloffset[acelerador];
+		controlautomatico[volante] = canaloffset[volante];
+		controlautomatico[acelerador] = canaloffset[acelerador];
 		PORTA.OUTSET = PIN0_bm;//Termino la configuracion
 		_delay_ms(500);//parpadeo para ver el encendido
 	}
@@ -166,12 +196,16 @@
 			reversa = false;
 			}
 		if (canal[4]<5000){
-		asistencia = 0;
+		manual = true;
+		asistido = false;
+		autonomo = false;
 		PORTA.OUTCLR= PIN0_bm;//led de aviso
 		}
 		
 		if (canal[4]<6500&&canal[4]>5500){
-			asistencia = 1;
+			manual = false;
+			asistido = true;
+			autonomo = false;
 			currentmillis = millis;
 			if (currentmillis - previousmillis >= 250) {
 				previousmillis = currentmillis;
@@ -180,7 +214,9 @@
 		}
 		
 		if (canal[4]>7000){
-		asistencia = 2;	
+		manual = false;
+		asistido = false;
+		autonomo = true;
 			PORTA.OUTSET = PIN0_bm;
 		}
 		
@@ -223,23 +259,20 @@
 		Controlador_P[0] = 0;//derecho
 		Controlador_P[1] = 0;//izquierda
 
-		if (asistencia==0){
+		if (manual){
 			canalcontrol[volante] = canal[volante];// + Controlador_P[0] - Controlador_P [1];
 			canalcontrol[acelerador] = canal[acelerador];
 		}
-		if (asistencia==1){
+		if (asistido){
 			canalcontrol[volante] = canal[volante] + Controlador_P[0] - Controlador_P [1];
 			canalcontrol[acelerador] = canal[acelerador];
 		}
-		if (asistencia==2){
+		if (autonomo){
 			canalcontrol[volante] = canaloffset[volante];
-			canalcontrol[acelerador] = canaloffset[acelerador];
+			canalcontrol[acelerador] = adelante(4000);
 		}
 		
-					//canalcontrol[volante] = canaloffset[volante];
-					//canalcontrol[acelerador] = canaloffset[acelerador];
-		
-	if(reversa){//reversa con sensor
+	if(!reversa){//reversa con sensor
 		if (canalcontrol[volante]>=canaloffset[volante]){
 			canalcontrol[volante] = ((canalcontrol[volante]-canaloffset[volante])>>1);//mezcladora
 			motor[izquierdo] = (canalcontrol[acelerador]-canalcontrol[volante] )>>2;
