@@ -40,7 +40,7 @@
 	uint16_t controlautomaticoprevio[2];
 	uint16_t canaloffset[2];
 	uint16_t sensoroffset[8];
-	uint16_t millis = 0;
+	uint16_t millis[2];
 	uint16_t previousmillis = 0;
 	uint16_t currentmillis = 0;
 	uint16_t nuevomillis = 0;
@@ -75,32 +75,45 @@
 	}
 	//generador de trayectorias, falta el parametro de velocidad mientras tanto sera fija
 	//valores de 4000 a 2000
-	uint16_t adelante(uint16_t distancia){
+	uint16_t adelante(uint16_t distancia, uint16_t velocidad){//control de aceleracion de 2000, 2000 max
 		if (primero){
-		millis = 0;// reiniciar temporizador
+		millis[acelerador] = 0;// reiniciar temporizador
 		primero = false;
 		}
-		if (millis>=(distancia)){
+		if (millis[acelerador]>=(distancia)){
 			if (controlautomatico[acelerador]<= canaloffset[acelerador]){//saturacion
 				controlautomatico[acelerador] = canaloffset[acelerador];
 			}else{
-				controlautomatico[acelerador] = (controlautomaticoprevio[acelerador]<<1)-canaloffset[acelerador]-millis;//rampa inversa
+				controlautomatico[acelerador] = (controlautomaticoprevio[acelerador]<<1)-canaloffset[acelerador]-millis[acelerador];//rampa inversa
 			}
 		}else{
-			if (millis<=2000){//rampa positiva
-				controlautomatico[acelerador] = canaloffset[acelerador]+millis;	
+			if (millis[acelerador]<=velocidad){//rampa positiva
+				controlautomatico[acelerador] = canaloffset[acelerador]+millis[acelerador];	
 				controlautomaticoprevio[acelerador] = controlautomatico[acelerador];
-				nuevomillis	= millis;
 			}
 		}
 		return  controlautomatico[acelerador];
 	}
-	void atras(uint8_t distancia){
-		
+	uint16_t giro(uint16_t distancia,uint16_t velocidad){
+				if (primero){
+					millis[volante] = 0;// reiniciar temporizador
+					primero = false;
+				}
+				if (millis[volante]>=(distancia)){
+					if (controlautomatico[volante]<= canaloffset[volante]){//saturacion
+						controlautomatico[volante] = canaloffset[acelerador];
+						}else{
+						controlautomatico[volante] = (controlautomaticoprevio[volante]<<1)-canaloffset[volante]-millis[volante];//rampa inversa
+					}
+					}else{
+					if (millis[volante]<=velocidad){//rampa positiva
+						controlautomatico[volante] = canaloffset[volante]+millis[volante];
+						controlautomaticoprevio[volante] = controlautomatico[volante];
+					}
+				}
+				return  controlautomatico[volante];
 	}
-	void giro(uint8_t angulo){
-		
-	}
+
 	void arco(uint8_t distancia){
 			
 	}
@@ -184,7 +197,8 @@
 		lectura_canal = true;
 	}
 	ISR(TCB1_INT_vect){//contador de milisegundos, para generador de trayectorias
-		millis++;
+		millis[acelerador]++;
+		millis[volante]++;
 		TCB1.INTFLAGS &= ~TCB_CAPT_bp;
 	}
 	ISR(TCB2_INT_vect){//Interrupcion para checar canales cada 10 ms
@@ -207,7 +221,7 @@
 			manual = false;
 			asistido = true;
 			autonomo = false;
-			currentmillis = millis;
+			currentmillis = millis[acelerador];
 			if (currentmillis - previousmillis >= 250) {
 				previousmillis = currentmillis;
 				PORTA.OUTTGL = PIN0_bm;
@@ -269,8 +283,8 @@
 			canalcontrol[acelerador] = canal[acelerador];
 		}
 		if (autonomo){
-			canalcontrol[volante] = canaloffset[volante];
-			canalcontrol[acelerador] = adelante(1000);
+			canalcontrol[volante] = giro(1000,2000);
+			canalcontrol[acelerador] = canaloffset[acelerador];
 		}
 		
 	if(!reversa){//reversa con sensor
