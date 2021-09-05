@@ -37,7 +37,7 @@
 	volatile uint16_t automatico[2];
 	
 	uint16_t controlautomatico[2];
-	uint16_t controlautomaticoprevio = 0x00;
+	uint16_t controlautomaticoprevio[2];
 	uint16_t canaloffset[2];
 	uint16_t sensoroffset[8];
 	uint16_t millis = 0;
@@ -84,12 +84,13 @@
 			if (controlautomatico[acelerador]<= canaloffset[acelerador]){//saturacion
 				controlautomatico[acelerador] = canaloffset[acelerador];
 			}else{
-				
-				controlautomatico[acelerador] = (canaloffset[acelerador]<<1)-millis;//rampa inversa
+				controlautomatico[acelerador] = (controlautomaticoprevio[acelerador]<<1)-canaloffset[acelerador]-millis;//rampa inversa
 			}
 		}else{
 			if (millis<=2000){//rampa positiva
 				controlautomatico[acelerador] = canaloffset[acelerador]+millis;	
+				controlautomaticoprevio[acelerador] = controlautomatico[acelerador];
+				nuevomillis	= millis;
 			}
 		}
 		return  controlautomatico[acelerador];
@@ -269,7 +270,7 @@
 		}
 		if (autonomo){
 			canalcontrol[volante] = canaloffset[volante];
-			canalcontrol[acelerador] = adelante(4000);
+			canalcontrol[acelerador] = adelante(1000);
 		}
 		
 	if(!reversa){//reversa con sensor
