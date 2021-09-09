@@ -21,10 +21,10 @@
 	#include <stdbool.h>
 	#include <util/delay.h>
 
-	int cont = 0;//Contador de canal
-	int contadc = 0;//Contador de sensores
-	int contcal = 0;//contador de calibracion
-
+	uint8_t cont = 0;//Contador de canal
+	uint8_t contadc = 0;//Contador de sensores
+	uint8_t contador = 0;
+	
 	uint16_t Controlador_D[2] ;
 	uint16_t Controlador_P[2] ;
 	volatile uint16_t VALORADC = 0x0000;
@@ -57,13 +57,14 @@
 	volatile bool primero = true;
 	volatile bool segundo = true;
 	volatile bool tercero = true;
+	bool cuarto = false;
 	volatile bool reversa = false;
 
 	void offsetsignals(){//etapa de autocalibracion por promedio, pequeño filtro digital
 
 		while (!lectura_canal&&canal[acelerador]<6500&&canal[acelerador]>5500&&canal[volante]<6500&&canal[volante]>5500){//Seguridad
 		}
-		_delay_ms(1000);
+		_delay_ms(1500);
 		for (int i = 0;i<8;i++){//adquisición de señales, 8 valores en total
 			_delay_ms(20);
 			canaloffset[volante] += canal[volante];
@@ -76,18 +77,22 @@
 	//valores de 4000 a 2000
 	uint16_t adelante(uint16_t distancia, uint16_t velocidad){//control de aceleracion de 2000, 2000 max
 		if (segundo){
-		millis[acelerador] = 0;// reiniciar temporizador
-		segundo = false;
-		finadelante = false;
+			millis[acelerador] = 0;// reiniciar temporizador
+			segundo = false;
 		}
 		if (millis[acelerador]<=(distancia)){
-			if (controlautomatico[acelerador]<=velocidad){//rampa positiva
+			if (millis[acelerador]<=velocidad){//rampa positiva
 				controlautomatico[acelerador] = canaloffset[acelerador]+millis[acelerador];
 				controlautomaticoprevio[acelerador] = controlautomatico[acelerador];
-			}		
-		}
+			}
+			}else{
+				segundo = true;
+				primero = true;
+				contador++;
+			}
 		return  controlautomatico[acelerador];
 	}
+
 	uint16_t giro(uint16_t distancia,uint16_t velocidad){
 				if (primero){
 					millis[volante] = 0;// reiniciar temporizador
@@ -105,8 +110,11 @@
 						controlautomaticoprevio[volante] = controlautomatico[volante];
 					}
 				}
-				if (millis[volante]>=(distancia<<1))
-				{controlautomatico[volante] = canaloffset[volante];
+				if (millis[volante]>=(distancia<<1)){
+				controlautomatico[volante] = canaloffset[volante];
+				contador++;
+				primero = true;
+				segundo = true;
 				}
 				return  controlautomatico[volante];
 	}
@@ -128,11 +136,32 @@
 					}
 				}
 				if (millis[volante]>=(distancia<<1))
-				{controlautomatico[volante] = canaloffset[volante];
+				{
+					controlautomatico[volante] = canaloffset[volante];
+					contador=0;
+					primero = true;
+					segundo = true;
 				}
 				return  controlautomatico[volante];
 	}
 	void secuencia(void){
+		if (contador==0){ 
+			canalcontrol[volante] = canaloffset[volante];
+			canalcontrol[acelerador] = adelante(850,850);
+		}
+		if (contador==1){
+			canalcontrol[volante] = giro(2700,500);
+		}
+		if (contador==2){
+			canalcontrol[volante] = canaloffset[volante];
+			canalcontrol[acelerador] = adelante(850,850);
+		}
+		if (contador==3){
+			canalcontrol[volante] = vuelta(2500,500);
+		}
+		if (contador>=4){
+			contador = 0;
+		}
 	}
 	void setup(void){
 	
@@ -233,6 +262,7 @@
 		primero = true;
 		segundo = true;
 		tercero = true;
+		cuarto = false;
 		PORTA.OUTCLR= PIN0_bm;//led de aviso
 		}
 		
@@ -300,8 +330,11 @@
 			canalcontrol[acelerador] = canaloffset[acelerador];
 		}
 		if (autonomo){
-			canalcontrol[volante] = vuelta(3000,2000);
-			canalcontrol[acelerador] = canaloffset[volante];//adelante(3000,500);//adelante(2000,1000);
+			//canalcontrol[volante] = giro(2800,500);
+			//canalcontrol[acelerador] = canaloffset[volante];//adelante(3000,500);//adelante(2000,1000);
+			//funcion de trayectoria
+			
+			secuencia();
 			
 		}
 	//Cinematica del robot, valores de 4000 an 8000 con dos variables de control canalcontrol volante y acelerador
