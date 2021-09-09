@@ -31,7 +31,7 @@
 	volatile uint16_t canal[7];//valor de canal de 4000 hasta 8000
 	//uint16_t canalcal[3][7];//vectores de calibracion
 	//uint16_t sensorcal[3][7];
-	volatile uint16_t canalcontrol[2];
+	volatile static uint16_t canalcontrol[2];
 	volatile uint16_t sensor[16];
 	volatile uint16_t motor[2];//motor 0 izquid, motor 1 derecho
 	volatile uint16_t automatico[2];
@@ -49,15 +49,12 @@
 	volatile bool manual = true;//0 sin asistencia, 1 asistencia, 2 autonomo
 	volatile bool asistido = false;
 	volatile bool autonomo = false;
-	//0 manual
-	//1 asistido,semiautonomo
-	//2 autonomo
 	bool lectura = false;
 	bool lectura_canal = false;
-	bool calibracion = false;
-	bool primero = true;
-	bool segundo = false;
-	
+	bool sentido = false;
+	volatile bool primero = true;
+	volatile bool segundo = true;
+	volatile bool tercero = true;
 	volatile bool reversa = false;
 
 	void offsetsignals(){//etapa de autocalibracion por promedio, pequeño filtro digital
@@ -76,9 +73,9 @@
 	//generador de trayectorias, falta el parametro de velocidad mientras tanto sera fija
 	//valores de 4000 a 2000
 	uint16_t adelante(uint16_t distancia, uint16_t velocidad){//control de aceleracion de 2000, 2000 max
-		if (primero){
+		if (segundo){
 		millis[acelerador] = 0;// reiniciar temporizador
-		primero = false;
+		segundo = false;
 		}
 		if (millis[acelerador]>=(distancia)){
 			if (controlautomatico[acelerador]<= canaloffset[acelerador]){//saturacion
@@ -92,6 +89,9 @@
 				controlautomaticoprevio[acelerador] = controlautomatico[acelerador];
 			}
 		}
+		if (millis[acelerador]>=(distancia<<1))
+		{controlautomatico[acelerador] = canaloffset[acelerador];
+		}
 		return  controlautomatico[acelerador];
 	}
 	uint16_t giro(uint16_t distancia,uint16_t velocidad){
@@ -101,7 +101,7 @@
 				}
 				if (millis[volante]>=(distancia)){
 					if (controlautomatico[volante]<= canaloffset[volante]){//saturacion
-						controlautomatico[volante] = canaloffset[acelerador];
+						controlautomatico[volante] = canaloffset[volante];
 						}else{
 						controlautomatico[volante] = (controlautomaticoprevio[volante]<<1)-canaloffset[volante]-millis[volante];//rampa inversa
 					}
@@ -111,13 +111,33 @@
 						controlautomaticoprevio[volante] = controlautomatico[volante];
 					}
 				}
+				if (millis[volante]>=(distancia<<1))
+				{controlautomatico[volante] = canaloffset[volante];
+				}
 				return  controlautomatico[volante];
 	}
-
-	void arco(uint8_t distancia){
-			
+	uint16_t vuelta(uint16_t distancia,uint16_t velocidad){
+				if (tercero){
+					millis[volante] = 0;// reiniciar temporizador
+					tercero = false;
+				}
+				if (millis[volante]>=(distancia)){
+					if (controlautomatico[volante]<= canaloffset[volante]){//saturacion
+						controlautomatico[volante] = canaloffset[volante];
+						}else{
+						controlautomatico[volante] = (controlautomaticoprevio[volante]<<1)-canaloffset[volante]+millis[volante];//rampa inversa
+					}
+					}else{
+					if (millis[volante]>=(canaloffset[volante]-velocidad)){//rampa positiva
+				controlautomatico[volante] = canaloffset[volante]-millis[volante];
+						controlautomaticoprevio[volante] = controlautomatico[volante];
+				if (millis[acelerador]>=(distancia<<1)){
+					controlautomatico[volante] = canaloffset[volante];
+				}
+				}
+				}
+				return  controlautomatico[volante];
 	}
-	
 	void setup(void){
 	
 		//Configuracion de CLKPER para fuente de reloj de varios perifericos
@@ -214,6 +234,9 @@
 		manual = true;
 		asistido = false;
 		autonomo = false;
+		primero = true;
+		segundo = true;
+		tercero = true;
 		PORTA.OUTCLR= PIN0_bm;//led de aviso
 		}
 		
@@ -234,8 +257,6 @@
 		autonomo = true;
 			PORTA.OUTSET = PIN0_bm;
 		}
-		
-		
 		TCB2.INTFLAGS &= ~TCB_CAPT_bp;
 	}
 	//Interrupción de lectura de ADC para sensores
@@ -279,21 +300,21 @@
 			canalcontrol[acelerador] = canal[acelerador];
 		}
 		if (asistido){
-			canalcontrol[volante] = canal[volante] + Controlador_P[0] - Controlador_P [1];
-			canalcontrol[acelerador] = canal[acelerador];
-		}
-		if (autonomo){
-			canalcontrol[volante] = giro(1000,2000);
+			canalcontrol[volante] = canaloffset[volante];//canal[volante] + Controlador_P[0] - Controlador_P [1];
 			canalcontrol[acelerador] = canaloffset[acelerador];
 		}
-		
+		if (autonomo){
+			canalcontrol[volante] =  5500;
+			canalcontrol[acelerador] = canaloffset[acelerador];//adelante(1500, 500);//adelante(3000,500);//adelante(2000,1000);
+		}
+	//Cinematica del robot, valores de 4000 an 8000 con dos variables de control canalcontrol volante y acelerador
 	if(!reversa){//reversa con sensor
 		if (canalcontrol[volante]>=canaloffset[volante]){
 			canalcontrol[volante] = ((canalcontrol[volante]-canaloffset[volante])>>1);//mezcladora
 			motor[izquierdo] = (canalcontrol[acelerador]-canalcontrol[volante] )>>2;
 			motor[derecho] = (canalcontrol[acelerador]+canalcontrol[volante] )>>2;
 			}else{
-			canalcontrol[volante] = (canaloffset[volante]-canal[volante])>>1;//mezcladora
+			canalcontrol[volante] = (canaloffset[volante]-canalcontrol[volante])>>1;//mezcladora
 			motor[izquierdo] = (canalcontrol[acelerador]+canalcontrol[volante])>>2;
 			motor[derecho] = (canalcontrol[acelerador]-canalcontrol[volante])>>2;
 			}}else{//Normal
