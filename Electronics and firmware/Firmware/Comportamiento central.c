@@ -86,14 +86,13 @@
 				controlautomaticoprevio[acelerador] = controlautomatico[acelerador];
 			}
 			}else{
-				segundo = true;
 				primero = true;
 				contador++;
 			}
 		return  controlautomatico[acelerador];
 	}
 
-	uint16_t giro(uint16_t distancia,uint16_t velocidad){
+	uint16_t giro(uint16_t distancia,uint16_t velocidad,bool sentido){
 				if (primero){
 					millis[volante] = 0;// reiniciar temporizador
 					primero = false;
@@ -102,11 +101,22 @@
 					if (controlautomatico[volante]<= canaloffset[volante]){//saturacion
 						controlautomatico[volante] = canaloffset[volante];
 						}else{
+							if(sentido){
 						controlautomatico[volante] = (controlautomaticoprevio[volante]<<1)-canaloffset[volante]-millis[volante];//rampa inversa
+							}else{
+						controlautomatico[volante] = (controlautomaticoprevio[volante]<<1)-canaloffset[volante]+millis[volante];//rampa inversa		
+							}
 					}
 					}else{
 					if (millis[volante]<=velocidad){//rampa positiva
+						if (sentido){
 						controlautomatico[volante] = canaloffset[volante]+millis[volante];
+						} 
+						else{
+						controlautomatico[volante] = canaloffset[volante]-millis[volante];
+						}
+						
+						
 						controlautomaticoprevio[volante] = controlautomatico[volante];
 					}
 				}
@@ -114,50 +124,50 @@
 				controlautomatico[volante] = canaloffset[volante];
 				contador++;
 				primero = true;
-				segundo = true;
 				}
 				return  controlautomatico[volante];
 	}
-	uint16_t vuelta(uint16_t distancia,uint16_t velocidad){
-				if (primero){
-					millis[volante] = 0;// reiniciar temporizador
-					primero = false;
-				}
-				if (millis[volante]>=(distancia)){
-					if (controlautomatico[volante]<= canaloffset[volante]){//saturacion
-						controlautomatico[volante] = canaloffset[volante];
-						}else{
-						controlautomatico[volante] = (controlautomaticoprevio[volante]<<1)-canaloffset[volante]+millis[volante];//rampa inversa
-					}
-					}else{
-					if (millis[volante]<=velocidad){//rampa positiva
-						controlautomatico[volante] = canaloffset[volante]-millis[volante];
-						controlautomaticoprevio[volante] = controlautomatico[volante];
-					}
-				}
-				if (millis[volante]>=(distancia<<1))
-				{
-					controlautomatico[volante] = canaloffset[volante];
-					contador=0;
-					primero = true;
-					segundo = true;
-				}
-				return  controlautomatico[volante];
-	}
+	//uint16_t vuelta(uint16_t distancia,uint16_t velocidad){
+				//if (tercero){
+					//millis[2] = 0;// reiniciar temporizador
+					//tercero = false;
+				//}
+				//if (millis[2]>=(distancia)){
+					//if (controlautomatico[volante]<= canaloffset[volante]){//saturacion
+						//controlautomatico[volante] = canaloffset[volante];
+						//}else{
+						//controlautomatico[volante] = (controlautomaticoprevio[volante]<<1)-canaloffset[volante]+millis[2];//rampa inversa
+					//}
+					//}else{
+					//if (millis[2]<=velocidad){//rampa positiva
+						//controlautomatico[volante] = canaloffset[volante]-millis[2];
+						//controlautomaticoprevio[volante] = controlautomatico[volante];
+					//}
+				//}
+				//if (millis[2]>=(distancia<<1))
+				//{
+					//controlautomatico[volante] = canaloffset[volante];
+					//contador=0;
+					//primero = true;
+					//segundo = true;
+					//tercero = true;
+				//}
+				//return  controlautomatico[volante];
+	//}
 	void secuencia(void){
 		if (contador==0){ 
 			canalcontrol[volante] = canaloffset[volante];
-			canalcontrol[acelerador] = adelante(850,850);
+			canalcontrol[acelerador] = adelante(600,600);
 		}
 		if (contador==1){
-			canalcontrol[volante] = giro(2700,500);
+			canalcontrol[volante] = giro(1800,400,true);
 		}
 		if (contador==2){
 			canalcontrol[volante] = canaloffset[volante];
-			canalcontrol[acelerador] = adelante(850,850);
+			canalcontrol[acelerador] = adelante(600,600);
 		}
 		if (contador==3){
-			canalcontrol[volante] = vuelta(2500,500);
+			canalcontrol[volante] = giro(1800,400,false);
 		}
 		if (contador>=4){
 			contador = 0;
@@ -333,7 +343,6 @@
 			//canalcontrol[volante] = giro(2800,500);
 			//canalcontrol[acelerador] = canaloffset[volante];//adelante(3000,500);//adelante(2000,1000);
 			//funcion de trayectoria
-			
 			secuencia();
 			
 		}
