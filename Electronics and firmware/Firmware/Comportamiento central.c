@@ -99,18 +99,13 @@
 					millis[volante] = 0;// reiniciar temporizador
 					primero = false;
 				}
-				if (millis[volante]>=(distancia)){
-					if (controlautomatico[volante]<= canaloffset[volante]){//saturacion
-						controlautomatico[volante] = canaloffset[volante];
-						}else{
-						controlautomatico[volante] = (controlautomaticoprevio[volante]<<1)-canaloffset[volante]-millis[volante];//rampa inversa
-					}
-					}else{
-					if (millis[volante]<=velocidad){//rampa positiva
-						controlautomatico[volante] = canaloffset[volante]+millis[volante];
-						controlautomaticoprevio[volante] = controlautomatico[volante];
-					}
+				if (millis[volante]<=(velocidad)){//rampa positiva
+					controlautomatico[volante] = canaloffset[volante]+millis[volante];
+					controlautomaticoprevio[volante] = controlautomatico[volante];
 				}
+				else{
+					controlautomatico[volante] = (controlautomaticoprevio[volante]<<1)-canaloffset[volante]-millis[volante];//rampa positiva
+				}				
 				if (millis[volante]>=(distancia<<1))
 				{controlautomatico[volante] = canaloffset[volante];
 				}
@@ -121,20 +116,15 @@
 					millis[volante] = 0;// reiniciar temporizador
 					tercero = false;
 				}
-				if (millis[volante]>=(distancia)){
-					if (controlautomatico[volante]<= canaloffset[volante]){//saturacion
-						controlautomatico[volante] = canaloffset[volante];
-						}else{
-						controlautomatico[volante] = (controlautomaticoprevio[volante]<<1)-canaloffset[volante]+millis[volante];//rampa inversa
+								if (millis[volante]<=(velocidad)){//rampa positiva
+					controlautomatico[volante] = canaloffset[volante]-millis[volante];
+					controlautomaticoprevio[volante] = controlautomatico[volante];
 					}
-					}else{
-					if (millis[volante]>=(canaloffset[volante]-velocidad)){//rampa positiva
-				controlautomatico[volante] = canaloffset[volante]-millis[volante];
-						controlautomaticoprevio[volante] = controlautomatico[volante];
-				if (millis[acelerador]>=(distancia<<1)){
-					controlautomatico[volante] = canaloffset[volante];
-				}
-				}
+					else{
+					controlautomatico[volante] = (controlautomaticoprevio[volante]<<1)-canaloffset[volante]+millis[volante];//rampa inversa	
+					}
+				if (millis[volante]>=(distancia<<1))
+				{controlautomatico[volante] = canaloffset[volante];
 				}
 				return  controlautomatico[volante];
 	}
@@ -304,7 +294,7 @@
 			canalcontrol[acelerador] = canaloffset[acelerador];
 		}
 		if (autonomo){
-			canalcontrol[volante] =  5500;
+			canalcontrol[volante] =  giro(2000,2000);
 			canalcontrol[acelerador] = canaloffset[acelerador];//adelante(1500, 500);//adelante(3000,500);//adelante(2000,1000);
 		}
 	//Cinematica del robot, valores de 4000 an 8000 con dos variables de control canalcontrol volante y acelerador
