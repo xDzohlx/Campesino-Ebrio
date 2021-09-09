@@ -52,7 +52,8 @@
 	bool lectura = false;
 	bool lectura_canal = false;
 	bool sentido = false;
-	bool trayectoria = false;
+	bool finadelante = false;
+	bool fingiro = false;
 	volatile bool primero = true;
 	volatile bool segundo = true;
 	volatile bool tercero = true;
@@ -77,17 +78,13 @@
 		if (segundo){
 		millis[acelerador] = 0;// reiniciar temporizador
 		segundo = false;
+		finadelante = false;
 		}
-		if (millis[acelerador]>=(distancia)){
-			//controlautomatico[acelerador] = canaloffset[acelerador];
-			//if (!trayectoria){
-			//controlautomatico[acelerador] = (controlautomaticoprevio[acelerador]<<1)-canaloffset[acelerador]-millis[acelerador];//rampa inversa, freno
-			//}				
-		}else{
-			if (millis[acelerador]<=velocidad){//rampa positiva
-				controlautomatico[acelerador] = canaloffset[acelerador]+millis[acelerador];	
+		if (millis[acelerador]<=(distancia)){
+			if (controlautomatico[acelerador]<=velocidad){//rampa positiva
+				controlautomatico[acelerador] = canaloffset[acelerador]+millis[acelerador];
 				controlautomaticoprevio[acelerador] = controlautomatico[acelerador];
-			}
+			}		
 		}
 		return  controlautomatico[acelerador];
 	}
@@ -97,33 +94,45 @@
 					primero = false;
 				}
 				if (millis[volante]>=(distancia)){
+					if (controlautomatico[volante]<= canaloffset[volante]){//saturacion
+						controlautomatico[volante] = canaloffset[volante];
+						}else{
 						controlautomatico[volante] = (controlautomaticoprevio[volante]<<1)-canaloffset[volante]-millis[volante];//rampa inversa
+					}
 					}else{
 					if (millis[volante]<=velocidad){//rampa positiva
 						controlautomatico[volante] = canaloffset[volante]+millis[volante];
 						controlautomaticoprevio[volante] = controlautomatico[volante];
 					}
 				}
+				if (millis[volante]>=(distancia<<1))
+				{controlautomatico[volante] = canaloffset[volante];
+				}
 				return  controlautomatico[volante];
 	}
 	uint16_t vuelta(uint16_t distancia,uint16_t velocidad){
-				if (tercero){
+				if (primero){
 					millis[volante] = 0;// reiniciar temporizador
-					tercero = false;
+					primero = false;
 				}
-					if (millis[volante]>=(distancia)){
-						if (controlautomatico[volante]<= canaloffset[volante]){//saturacion
-							controlautomatico[volante] = canaloffset[volante];
-							}else{
-							controlautomatico[volante] = (controlautomaticoprevio[volante]<<1)-canaloffset[volante]+millis[volante];//rampa inversa
-						}
+				if (millis[volante]>=(distancia)){
+					if (controlautomatico[volante]<= canaloffset[volante]){//saturacion
+						controlautomatico[volante] = canaloffset[volante];
 						}else{
-						if (millis[volante]<=velocidad){//rampa positiva
-							controlautomatico[volante] = canaloffset[volante]-millis[volante];
-							controlautomaticoprevio[volante] = controlautomatico[volante];
-						}
+						controlautomatico[volante] = (controlautomaticoprevio[volante]<<1)-canaloffset[volante]+millis[volante];//rampa inversa
 					}
+					}else{
+					if (millis[volante]<=velocidad){//rampa positiva
+						controlautomatico[volante] = canaloffset[volante]-millis[volante];
+						controlautomaticoprevio[volante] = controlautomatico[volante];
+					}
+				}
+				if (millis[volante]>=(distancia<<1))
+				{controlautomatico[volante] = canaloffset[volante];
+				}
 				return  controlautomatico[volante];
+	}
+	void secuencia(void){
 	}
 	void setup(void){
 	
@@ -291,8 +300,9 @@
 			canalcontrol[acelerador] = canaloffset[acelerador];
 		}
 		if (autonomo){
-			canalcontrol[volante] = canaloffset[volante];
-			canalcontrol[acelerador] = adelante(1500, 500);//adelante(3000,500);//adelante(2000,1000);
+			canalcontrol[volante] = vuelta(3000,2000);
+			canalcontrol[acelerador] = canaloffset[volante];//adelante(3000,500);//adelante(2000,1000);
+			
 		}
 	//Cinematica del robot, valores de 4000 an 8000 con dos variables de control canalcontrol volante y acelerador
 	if(!reversa){//reversa con sensor
