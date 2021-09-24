@@ -1,3 +1,4 @@
+
 /*
 	 * Comportamiento central.c
 	 *
@@ -24,6 +25,7 @@
 	uint8_t cont = 0;//Contador de canal
 	uint8_t contadc = 0;//Contador de sensores
 	uint8_t contador = 0;
+	//uint8_t contfiltro=0;
 	
 	uint16_t Controlador_D[2] ;
 	uint16_t Controlador_P[2] ;
@@ -127,33 +129,7 @@
 				}
 				return  controlautomatico[volante];
 	}
-	//uint16_t vuelta(uint16_t distancia,uint16_t velocidad){
-				//if (tercero){
-					//millis[2] = 0;// reiniciar temporizador
-					//tercero = false;
-				//}
-				//if (millis[2]>=(distancia)){
-					//if (controlautomatico[volante]<= canaloffset[volante]){//saturacion
-						//controlautomatico[volante] = canaloffset[volante];
-						//}else{
-						//controlautomatico[volante] = (controlautomaticoprevio[volante]<<1)-canaloffset[volante]+millis[2];//rampa inversa
-					//}
-					//}else{
-					//if (millis[2]<=velocidad){//rampa positiva
-						//controlautomatico[volante] = canaloffset[volante]-millis[2];
-						//controlautomaticoprevio[volante] = controlautomatico[volante];
-					//}
-				//}
-				//if (millis[2]>=(distancia<<1))
-				//{
-					//controlautomatico[volante] = canaloffset[volante];
-					//contador=0;
-					//primero = true;
-					//segundo = true;
-					//tercero = true;
-				//}
-				//return  controlautomatico[volante];
-	//}
+	
 	void secuencia(void){
 		if (contador==0){ 
 			canalcontrol[volante] = canaloffset[volante];
@@ -257,14 +233,26 @@
 		TCB1.INTFLAGS &= ~TCB_CAPT_bp;
 	}
 	ISR(TCB2_INT_vect){//Interrupcion para checar canales cada 10 ms
-		//currentMillis++;
-			if (sensor[sensor_reversa]>900){
-			reversa = true;
-			//PORTA.OUTSET = PIN3_bm;// led apagado
-			}else{
-			//PORTA.OUTCLR = PIN3_bm;// led prendido
-			reversa = false;
+		
+			if (sensor[sensor_reversa]>750){
+			if (contfiltro<32){
+			contfiltro++;
 			}
+			}
+			if (sensor[sensor_reversa]<650){
+			if (contfiltro>0){
+			contfiltro--;
+			}
+			}
+			if (contfiltro>24)
+			{
+				PORTA.OUTSET = PIN0_bm;// led apagado
+			}
+			if (contfiltro<8)
+			{
+				PORTA.OUTCLR = PIN0_bm;// led prendido
+			}
+			
 		if (canal[4]<5000){
 		manual = true;
 		asistido = false;
@@ -273,7 +261,7 @@
 		segundo = true;
 		tercero = true;
 		cuarto = false;
-		PORTA.OUTCLR= PIN0_bm;//led de aviso
+		//PORTA.OUTCLR= PIN0_bm;//led de aviso
 		}
 		
 		if (canal[4]<6500&&canal[4]>5500){
@@ -283,7 +271,7 @@
 			currentmillis = millis[acelerador];
 			if (currentmillis - previousmillis >= 250) {
 				previousmillis = currentmillis;
-				PORTA.OUTTGL = PIN0_bm;
+				//PORTA.OUTTGL = PIN0_bm;
 			}
 		}
 		
@@ -291,7 +279,7 @@
 		manual = false;
 		asistido = false;
 		autonomo = true;
-			PORTA.OUTSET = PIN0_bm;
+			//PORTA.OUTSET = PIN0_bm;
 		}
 		TCB2.INTFLAGS &= ~TCB_CAPT_bp;
 	}
