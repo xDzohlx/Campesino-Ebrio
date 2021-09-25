@@ -131,19 +131,19 @@
 	}
 	
 	void secuencia(void){
-		if (contador==0){ 
+		if (contador==0){
 			canalcontrol[volante] = canaloffset[volante];
-			canalcontrol[acelerador] = adelante(600,600);
+			canalcontrol[acelerador] = adelante(500,500);
 		}
 		if (contador==1){
-			canalcontrol[volante] = giro(1800,400,true);
+			canalcontrol[volante] = giro(2000,500,true);
 		}
 		if (contador==2){
 			canalcontrol[volante] = canaloffset[volante];
-			canalcontrol[acelerador] = adelante(600,600);
+			canalcontrol[acelerador] = adelante(450,450);
 		}
 		if (contador==3){
-			canalcontrol[volante] = giro(1800,400,false);
+			canalcontrol[volante] = giro(2000,500,false);
 		}
 		if (contador>=4){
 			contador = 0;
@@ -233,7 +233,7 @@
 		TCB1.INTFLAGS &= ~TCB_CAPT_bp;
 	}
 	ISR(TCB2_INT_vect){//Interrupcion para checar canales cada 10 ms
-		
+		//Sensor de reversa con filtro
 			if (sensor[sensor_reversa]>750){
 			if (contfiltro<32){
 			contfiltro++;
@@ -244,15 +244,15 @@
 			contfiltro--;
 			}
 			}
-			if (contfiltro>24)
-			{
-				PORTA.OUTSET = PIN0_bm;// led apagado
+			if (contfiltro>24){	
+				reversa = false;
+				//PORTA.OUTSET = PIN0_bm;// led apagado
 			}
-			if (contfiltro<8)
-			{
-				PORTA.OUTCLR = PIN0_bm;// led prendido
+			if (contfiltro<8){	
+				reversa = true;
+				//PORTA.OUTCLR = PIN0_bm;// led prendido
 			}
-			
+		// x|	
 		if (canal[4]<5000){
 		manual = true;
 		asistido = false;
@@ -261,7 +261,7 @@
 		segundo = true;
 		tercero = true;
 		cuarto = false;
-		//PORTA.OUTCLR= PIN0_bm;//led de aviso
+		PORTA.OUTCLR= PIN0_bm;//led de aviso
 		}
 		
 		if (canal[4]<6500&&canal[4]>5500){
@@ -271,7 +271,7 @@
 			currentmillis = millis[acelerador];
 			if (currentmillis - previousmillis >= 250) {
 				previousmillis = currentmillis;
-				//PORTA.OUTTGL = PIN0_bm;
+				PORTA.OUTTGL = PIN0_bm;
 			}
 		}
 		
@@ -279,7 +279,7 @@
 		manual = false;
 		asistido = false;
 		autonomo = true;
-			//PORTA.OUTSET = PIN0_bm;
+			PORTA.OUTSET = PIN0_bm;
 		}
 		TCB2.INTFLAGS &= ~TCB_CAPT_bp;
 	}
