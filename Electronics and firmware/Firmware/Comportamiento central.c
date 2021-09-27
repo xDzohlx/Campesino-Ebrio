@@ -1,4 +1,3 @@
-
 /*
 	 * Comportamiento central.c
 	 *
@@ -15,6 +14,7 @@
 	#define izquierdo 0
 	#define derecho 1
 	#define sensor_reversa 4
+	#define sensor_acelerometro 5
 
 	#include <avr/io.h>
 	#include <avr/interrupt.h>
@@ -71,7 +71,9 @@
 			_delay_ms(20);
 			canaloffset[volante] += canal[volante];
 			canaloffset[acelerador] += canal[acelerador];
+			sensoroffset[sensor_acelerometro] += sensoroffset[sensor_acelerometro];
 		}
+		sensoroffset[sensor_acelerometro] = (sensoroffset[sensor_acelerometro]>>3);
 		canaloffset[volante] = (canaloffset[volante]>>3);//division del promedio
 		canaloffset[acelerador] = (canaloffset[acelerador]>>3);
 	}
@@ -82,19 +84,18 @@
 			millis[acelerador] = 0;// reiniciar temporizador
 			segundo = false;
 		}
-		if (millis[acelerador]<=(distancia)){
 			if (millis[acelerador]<=velocidad){//rampa positiva
 				controlautomatico[acelerador] = canaloffset[acelerador]+millis[acelerador];
-				controlautomaticoprevio[acelerador] = controlautomatico[acelerador];
+				//controlautomaticoprevio[acelerador] = controlautomatico[acelerador];
 			}
-			}else{
-				primero = true;
+		if (millis[acelerador]>=(distancia<<1)){
 				contador++;
-			}
+				segundo = true;
+		}
 		return  controlautomatico[acelerador];
 	}
 
-	uint16_t giro(uint16_t distancia,uint16_t velocidad,bool sentido){
+	uint16_t giro(uint16_t distancia,uint16_t velocidad,bool sentido){//true derecha, false izquierda,alrededor de 900 son 90 grados con 550 de velcodiad tangencial y 500 de giro
 				if (primero){
 					millis[volante] = 0;// reiniciar temporizador
 					primero = false;
@@ -117,8 +118,6 @@
 						else{
 						controlautomatico[volante] = canaloffset[volante]-millis[volante];
 						}
-						
-						
 						controlautomaticoprevio[volante] = controlautomatico[volante];
 					}
 				}
@@ -130,22 +129,34 @@
 				return  controlautomatico[volante];
 	}
 	
-	void secuencia(void){
+	void ocho(void){
 		if (contador==0){
 			canalcontrol[volante] = canaloffset[volante];
-			canalcontrol[acelerador] = adelante(500,500);
+			canalcontrol[acelerador] = adelante(2000,500);
 		}
 		if (contador==1){
-			canalcontrol[volante] = giro(2000,500,true);
+			canalcontrol[volante] = giro(910,500,false);
 		}
-		if (contador==2){
+		//if (contador==2){
+			//canalcontrol[volante] = canaloffset[volante];
+			//canalcontrol[acelerador] = adelante(450,450);
+		//}
+		//if (contador==3){
+			//canalcontrol[volante] = giro(2000,500,false);
+		//}
+		if (contador>=2){
+			contador = 0;
+		}
+	}
+	void busqueda(void){
+		if (contador==0){
 			canalcontrol[volante] = canaloffset[volante];
-			canalcontrol[acelerador] = adelante(450,450);
+			canalcontrol[acelerador] = adelante(1000,700);
 		}
-		if (contador==3){
-			canalcontrol[volante] = giro(2000,500,false);
+		if (contador==1){
+			canalcontrol[volante] = giro(1200,100,true);
 		}
-		if (contador>=4){
+		if (contador>=2){
 			contador = 0;
 		}
 	}
@@ -261,7 +272,7 @@
 		segundo = true;
 		tercero = true;
 		cuarto = false;
-		PORTA.OUTCLR= PIN0_bm;//led de aviso
+		//PORTA.OUTCLR= PIN0_bm;//led de aviso
 		}
 		
 		if (canal[4]<6500&&canal[4]>5500){
@@ -271,7 +282,7 @@
 			currentmillis = millis[acelerador];
 			if (currentmillis - previousmillis >= 250) {
 				previousmillis = currentmillis;
-				PORTA.OUTTGL = PIN0_bm;
+			//	PORTA.OUTTGL = PIN0_bm;
 			}
 		}
 		
@@ -279,7 +290,7 @@
 		manual = false;
 		asistido = false;
 		autonomo = true;
-			PORTA.OUTSET = PIN0_bm;
+			//PORTA.OUTSET = PIN0_bm;
 		}
 		TCB2.INTFLAGS &= ~TCB_CAPT_bp;
 	}
@@ -331,7 +342,7 @@
 			//canalcontrol[volante] = giro(2800,500);
 			//canalcontrol[acelerador] = canaloffset[volante];//adelante(3000,500);//adelante(2000,1000);
 			//funcion de trayectoria
-			secuencia();
+			ocho();
 			
 		}
 	//Cinematica del robot, valores de 4000 an 8000 con dos variables de control canalcontrol volante y acelerador
