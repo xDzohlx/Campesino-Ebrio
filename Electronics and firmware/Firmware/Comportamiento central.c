@@ -1,3 +1,4 @@
+
 /*
 	 * Comportamiento central.c
 	 *
@@ -6,7 +7,7 @@
 	 */ 
 
 	#define F_CPU 16000000UL //Frecuencia del cpu 16 MHz
-	#define P 0//Controladores apagados
+	#define P 1//Controladores apagados
 	#define D 0
 	#define acelerador 1
 	#define volante 0
@@ -195,7 +196,7 @@
 		EVSYS.USERTCB1 |= EVSYS_CHANNEL_CHANNEL0_gc;//TCB1 coneectado al canal 0
 		//ADC
 		ADC0.CTRLA |= ADC_RESSEL_bm|ADC_FREERUN_bm;//RESOLUCION Y MODO DE MUESTRAS CONSECUTIVAS
-		ADC0.CTRLB |= ADC_SAMPNUM_ACC8_gc;//MUESTRAS
+		ADC0.CTRLB |= ADC_SAMPNUM_ACC32_gc;//MUESTRAS
 		ADC0.CTRLC |= ADC_REFSEL_VDDREF_gc|ADC_PRESC_DIV2_gc;//VOLTAJE DE REFERENCIA
 		ADC0.CTRLD |= ADC_INITDLY_DLY16_gc;//CONFIGURACION DEL RELOJ DEL ADC
 		//Canales de 0 al 7 despues a partir del 12 o 0x0C
@@ -218,11 +219,11 @@
 		CPUINT.LVL1VEC = TCB0_INT_vect_num;	
 		//Habilitar interrupciones generales
 		sei();
-		offsetsignals();// se obtiene el offset por promedio, de 8 valores por comodidad
-		controlautomatico[volante] = canaloffset[volante];
-		controlautomatico[acelerador] = canaloffset[acelerador];
-		PORTA.OUTSET = PIN0_bm;//Termino la configuracion
-		_delay_ms(500);//parpadeo para ver el encendido
+		//offsetsignals();// se obtiene el offset por promedio, de 8 valores por comodidad
+		//controlautomatico[volante] = canaloffset[volante];
+		//controlautomatico[acelerador] = canaloffset[acelerador];
+		//PORTA.OUTSET = PIN0_bm;//Termino la configuracion
+		//_delay_ms(500);//parpadeo para ver el encendido
 	}
 	ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
 	if (cont > 0)// lectura del canal no es necesario para decodificador
@@ -245,25 +246,35 @@
 	}
 	ISR(TCB2_INT_vect){//Interrupcion para checar canales cada 10 ms
 		//Sensor de reversa con filtro
-			if (sensor[sensor_reversa]>750){
-			if (contfiltro<32){
+			if (sensor[sensor_reversa]>90){
+			if (contfiltro<15){
 			contfiltro++;
 			}
 			}
-			if (sensor[sensor_reversa]<650){
+			if (sensor[sensor_reversa]<75){
 			if (contfiltro>0){
 			contfiltro--;
 			}
 			}
-			if (contfiltro>24){	
+			if (contfiltro>10){	
 				reversa = false;
 				//PORTA.OUTSET = PIN0_bm;// led apagado
 			}
-			if (contfiltro<8){	
+			if (contfiltro<5){	
 				reversa = true;
 				//PORTA.OUTCLR = PIN0_bm;// led prendido
 			}
-		// x|	
+		
+			//if (sensor[sensor_reversa]>90){
+				//PORTA.OUTSET = PIN0_bm;// led apagado
+				//reversa = false;
+			//}
+			//
+			//if (sensor[sensor_reversa]<75){
+				//PORTA.OUTCLR = PIN0_bm;// led prendido
+				//reversa = true;
+			//}
+		
 		if (canal[4]<5000){
 		manual = true;
 		asistido = false;
@@ -272,7 +283,7 @@
 		segundo = true;
 		tercero = true;
 		cuarto = false;
-		//PORTA.OUTCLR= PIN0_bm;//led de aviso
+		PORTA.OUTCLR= PIN0_bm;//led de aviso
 		}
 		
 		if (canal[4]<6500&&canal[4]>5500){
@@ -282,7 +293,7 @@
 			currentmillis = millis[acelerador];
 			if (currentmillis - previousmillis >= 250) {
 				previousmillis = currentmillis;
-			//	PORTA.OUTTGL = PIN0_bm;
+				PORTA.OUTTGL = PIN0_bm;
 			}
 		}
 		
@@ -290,16 +301,16 @@
 		manual = false;
 		asistido = false;
 		autonomo = true;
-			//PORTA.OUTSET = PIN0_bm;
+			PORTA.OUTSET = PIN0_bm;
 		}
 		TCB2.INTFLAGS &= ~TCB_CAPT_bp;
 	}
 	//Interrupción de lectura de ADC para sensores
 	ISR(ADC0_RESRDY_vect){//solo 4 sensores para empezar
 	//Canales de 0 al 7 despues a partir del 12 hasta sensor 14
-		sensor[contadc-1] = ADC0.RES;
+		sensor[contadc-1] = ADC0.RES>>5;//Promedio de 16 muestras
 		contadc++;
-	if (contadc>= 16){
+	if (contadc>= 8){
 		contadc = 0;
 		lectura = true;
 		}
@@ -326,16 +337,20 @@
 		//Controlador_P[0] = (sensor[1]-sensoroffset[1])>>2;//derecho
 		//Controlador_P[1] = (sensor[0]-sensoroffset[0])>>2;//izquierda
 		//*((uint8_t*)&(value)+1);
-		
-		Controlador_P[0] = 0;//derecho
-		Controlador_P[1] = 0;//izquierda
 
 		if (manual){
 			canalcontrol[volante] = canal[volante];// + Controlador_P[0] - Controlador_P [1];
 			canalcontrol[acelerador] = canal[acelerador];
 		}
 		if (asistido){
-			canalcontrol[volante] = canaloffset[volante];//canal[volante] + Controlador_P[0] - Controlador_P [1];
+			if (sensoroffset[sensor_acelerometro]<=sensor[sensor_acelerometro]){
+				canalcontrol[volante] = canaloffset[volante]-(Controlador_P[volante]*P);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
+			}else{
+				canalcontrol[volante] = canaloffset[volante]+(Controlador_P[volante]*P);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
+			}
+			
+			
+			
 			canalcontrol[acelerador] = canaloffset[acelerador];
 		}
 		if (autonomo){
