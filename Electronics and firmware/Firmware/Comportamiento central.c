@@ -1,4 +1,3 @@
-
 /*
 	 * Comportamiento central.c
 	 *
@@ -7,7 +6,7 @@
 	 */ 
 
 	#define F_CPU 16000000UL //Frecuencia del cpu 16 MHz
-	#define P 1//Controladores apagados
+	#define P 32//Controladores apagados
 	#define D 0
 	#define acelerador 1
 	#define volante 0
@@ -72,7 +71,7 @@
 			_delay_ms(20);
 			canaloffset[volante] += canal[volante];
 			canaloffset[acelerador] += canal[acelerador];
-			sensoroffset[sensor_acelerometro] += sensoroffset[sensor_acelerometro];
+			sensoroffset[sensor_acelerometro] += sensor[sensor_acelerometro];
 		}
 		sensoroffset[sensor_acelerometro] = (sensoroffset[sensor_acelerometro]>>3);
 		canaloffset[volante] = (canaloffset[volante]>>3);//division del promedio
@@ -219,11 +218,11 @@
 		CPUINT.LVL1VEC = TCB0_INT_vect_num;	
 		//Habilitar interrupciones generales
 		sei();
-		//offsetsignals();// se obtiene el offset por promedio, de 8 valores por comodidad
-		//controlautomatico[volante] = canaloffset[volante];
-		//controlautomatico[acelerador] = canaloffset[acelerador];
-		//PORTA.OUTSET = PIN0_bm;//Termino la configuracion
-		//_delay_ms(500);//parpadeo para ver el encendido
+		offsetsignals();// se obtiene el offset por promedio, de 8 valores por comodidad
+		controlautomatico[volante] = canaloffset[volante];
+		controlautomatico[acelerador] = canaloffset[acelerador];
+		PORTA.OUTSET = PIN0_bm;//Termino la configuracion
+		_delay_ms(500);//parpadeo para ver el encendido
 	}
 	ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
 	if (cont > 0)// lectura del canal no es necesario para decodificador
@@ -344,14 +343,13 @@
 		}
 		if (asistido){
 			if (sensoroffset[sensor_acelerometro]<=sensor[sensor_acelerometro]){
-				canalcontrol[volante] = canaloffset[volante]-(Controlador_P[volante]*P);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
+				Controlador_P[volante]=sensor[sensor_acelerometro]-sensoroffset[sensor_acelerometro];
+				canalcontrol[volante] = canal[volante]+(Controlador_P[volante]<<5);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
 			}else{
-				canalcontrol[volante] = canaloffset[volante]+(Controlador_P[volante]*P);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
+				Controlador_P[volante]=sensoroffset[sensor_acelerometro]-sensor[sensor_acelerometro];
+				canalcontrol[volante] = canal[volante]-(Controlador_P[volante]<<5);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
 			}
-			
-			
-			
-			canalcontrol[acelerador] = canaloffset[acelerador];
+			canalcontrol[acelerador] = canal[acelerador];
 		}
 		if (autonomo){
 			//canalcontrol[volante] = giro(2800,500);
