@@ -1,3 +1,4 @@
+
 /*
 	 * Comportamiento central.c
 	 *
@@ -193,10 +194,12 @@
 		//Configuracion de sistema de eventos para sensor de reversa con filtro
 		EVSYS.CHANNEL0 |= EVSYS_GENERATOR_PORT0_PIN3_gc;//PORTA3 conectado a canal 0 para sensor de reversa
 		EVSYS.USERTCB1 |= EVSYS_CHANNEL_CHANNEL0_gc;//TCB1 coneectado al canal 0
-		//ADC
+		//ADC y Vref
+		VREF.CTRLA = VREF_ADC0REFSEL_2V5_gc;// Se selecciona la referencia a 2.5 volts par mejorar la resolucion de los sensores
+		//ADC con referencia interna
 		ADC0.CTRLA |= ADC_RESSEL_bm|ADC_FREERUN_bm;//RESOLUCION Y MODO DE MUESTRAS CONSECUTIVAS
 		ADC0.CTRLB |= ADC_SAMPNUM_ACC32_gc;//MUESTRAS
-		ADC0.CTRLC |= ADC_REFSEL_VDDREF_gc|ADC_PRESC_DIV2_gc;//VOLTAJE DE REFERENCIA
+		ADC0.CTRLC |= ADC_REFSEL_INTREF_gc|ADC_PRESC_DIV2_gc;//VOLTAJE DE REFERENCIA
 		ADC0.CTRLD |= ADC_INITDLY_DLY16_gc;//CONFIGURACION DEL RELOJ DEL ADC
 		//Canales de 0 al 7 despues a partir del 12 o 0x0C
 		ADC0.MUXPOS = 0x00;//SELECCION DE CANAL DE ADC PD1
@@ -245,34 +248,24 @@
 	}
 	ISR(TCB2_INT_vect){//Interrupcion para checar canales cada 10 ms
 		//Sensor de reversa con filtro
-			if (sensor[sensor_reversa]>90){
+			if (sensor[sensor_reversa]>180){
 			if (contfiltro<15){
 			contfiltro++;
 			}
 			}
-			if (sensor[sensor_reversa]<75){
+			if (sensor[sensor_reversa]<140){
 			if (contfiltro>0){
 			contfiltro--;
 			}
 			}
 			if (contfiltro>10){	
 				reversa = false;
-				//PORTA.OUTSET = PIN0_bm;// led apagado
+				//PORTA.OUTSET = PIN0_bm;
 			}
 			if (contfiltro<5){	
 				reversa = true;
-				//PORTA.OUTCLR = PIN0_bm;// led prendido
+				//PORTA.OUTCLR = PIN0_bm;
 			}
-		
-			//if (sensor[sensor_reversa]>90){
-				//PORTA.OUTSET = PIN0_bm;// led apagado
-				//reversa = false;
-			//}
-			//
-			//if (sensor[sensor_reversa]<75){
-				//PORTA.OUTCLR = PIN0_bm;// led prendido
-				//reversa = true;
-			//}
 		
 		if (canal[4]<5000){
 		manual = true;
@@ -332,11 +325,6 @@
 	//ajuste de señal de lectura para señal de motores
 	//salida de motores
 	
-		//PORTA.OUTCLR = PIN3_bm;// led prendido
-		//Controlador_P[0] = (sensor[1]-sensoroffset[1])>>2;//derecho
-		//Controlador_P[1] = (sensor[0]-sensoroffset[0])>>2;//izquierda
-		//*((uint8_t*)&(value)+1);
-
 		if (manual){
 			canalcontrol[volante] = canal[volante];// + Controlador_P[0] - Controlador_P [1];
 			canalcontrol[acelerador] = canal[acelerador];
@@ -344,10 +332,10 @@
 		if (asistido){
 			if (sensoroffset[sensor_acelerometro]<=sensor[sensor_acelerometro]){
 				Controlador_P[volante]=sensor[sensor_acelerometro]-sensoroffset[sensor_acelerometro];
-				canalcontrol[volante] = canal[volante]+(Controlador_P[volante]<<5);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
+				canalcontrol[volante] = canal[volante]+(Controlador_P[volante]<<4);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
 			}else{
 				Controlador_P[volante]=sensoroffset[sensor_acelerometro]-sensor[sensor_acelerometro];
-				canalcontrol[volante] = canal[volante]-(Controlador_P[volante]<<5);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
+				canalcontrol[volante] = canal[volante]-(Controlador_P[volante]<<4);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
 			}
 			canalcontrol[acelerador] = canal[acelerador];
 		}
