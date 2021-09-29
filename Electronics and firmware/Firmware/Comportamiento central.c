@@ -1,4 +1,3 @@
-
 /*
 	 * Comportamiento central.c
 	 *
@@ -7,8 +6,8 @@
 	 */ 
 
 	#define F_CPU 16000000UL //Frecuencia del cpu 16 MHz
-	#define P 32//Controladores apagados
-	#define D 0
+	#define Kp 32
+	#define D 10
 	#define acelerador 1
 	#define volante 0
 	#define arma 3
@@ -16,6 +15,7 @@
 	#define derecho 1
 	#define sensor_reversa 4
 	#define sensor_acelerometro 5
+	#define controlador 3
 
 	#include <avr/io.h>
 	#include <avr/interrupt.h>
@@ -30,6 +30,7 @@
 	
 	uint16_t Controlador_D[2] ;
 	uint16_t Controlador_P[2] ;
+	uint16_t error_anterior = 0;
 	volatile uint16_t VALORADC = 0x0000;
 	volatile uint16_t canal[7];//valor de canal de 4000 hasta 8000
 	//uint16_t canalcal[3][7];//vectores de calibracion
@@ -43,7 +44,7 @@
 	uint16_t controlautomaticoprevio[2];
 	uint16_t canaloffset[2];
 	uint16_t sensoroffset[8];
-	uint16_t millis[2];
+	uint16_t millis[3];
 	uint16_t previousmillis = 0;
 	uint16_t currentmillis = 0;
 	uint16_t nuevomillis = 0;
@@ -95,7 +96,6 @@
 		}
 		return  controlautomatico[acelerador];
 	}
-
 	uint16_t giro(uint16_t distancia,uint16_t velocidad,bool sentido){//true derecha, false izquierda,alrededor de 900 son 90 grados con 550 de velcodiad tangencial y 500 de giro
 				if (primero){
 					millis[volante] = 0;// reiniciar temporizador
@@ -128,8 +128,7 @@
 				primero = true;
 				}
 				return  controlautomatico[volante];
-	}
-	
+	}	
 	void ocho(void){
 		if (contador==0){
 			canalcontrol[volante] = canaloffset[volante];
@@ -199,7 +198,7 @@
 		//ADC con referencia interna
 		ADC0.CTRLA |= ADC_RESSEL_bm|ADC_FREERUN_bm;//RESOLUCION Y MODO DE MUESTRAS CONSECUTIVAS
 		ADC0.CTRLB |= ADC_SAMPNUM_ACC32_gc;//MUESTRAS
-		ADC0.CTRLC |= ADC_REFSEL_INTREF_gc|ADC_PRESC_DIV2_gc;//VOLTAJE DE REFERENCIA
+		ADC0.CTRLC |= ADC_REFSEL_INTREF_gc|ADC_PRESC_DIV8_gc;//VOLTAJE DE REFERENCIA
 		ADC0.CTRLD |= ADC_INITDLY_DLY16_gc;//CONFIGURACION DEL RELOJ DEL ADC
 		//Canales de 0 al 7 despues a partir del 12 o 0x0C
 		ADC0.MUXPOS = 0x00;//SELECCION DE CANAL DE ADC PD1
@@ -227,6 +226,7 @@
 		PORTA.OUTSET = PIN0_bm;//Termino la configuracion
 		_delay_ms(500);//parpadeo para ver el encendido
 	}
+	//Interrupción de lectura de RC
 	ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
 	if (cont > 0)// lectura del canal no es necesario para decodificador
 		canal[cont -1]=TCB0.CCMP;//lectura del canal no necesario para salida decodificada
@@ -241,11 +241,14 @@
 		cont = 0;
 		lectura_canal = true;
 	}
+	//Interrupción de contador de milisegundos
 	ISR(TCB1_INT_vect){//contador de milisegundos, para generador de trayectorias
 		millis[acelerador]++;
 		millis[volante]++;
+		millis[controlador]++;
 		TCB1.INTFLAGS &= ~TCB_CAPT_bp;
 	}
+	//Interrupción periodica de 16 milisegundos para lecturas lentas
 	ISR(TCB2_INT_vect){//Interrupcion para checar canales cada 10 ms
 		//Sensor de reversa con filtro
 			if (sensor[sensor_reversa]>180){
@@ -308,6 +311,7 @@
 		}
 	ADC0.MUXPOS = contadc;
 	}
+	//Interrupción de reloj de tiempo real de seguridad
 	ISR(RTC_CNT_vect){//Interrupcion por tiempo seguridad
 		//Apagar motores
 		TCA0.SINGLE.CMP1 = canaloffset[acelerador];
@@ -330,20 +334,24 @@
 			canalcontrol[acelerador] = canal[acelerador];
 		}
 		if (asistido){
-			if (sensoroffset[sensor_acelerometro]<=sensor[sensor_acelerometro]){
-				Controlador_P[volante]=sensor[sensor_acelerometro]-sensoroffset[sensor_acelerometro];
-				canalcontrol[volante] = canal[volante]+(Controlador_P[volante]<<4);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
-			}else{
-				Controlador_P[volante]=sensoroffset[sensor_acelerometro]-sensor[sensor_acelerometro];
-				canalcontrol[volante] = canal[volante]-(Controlador_P[volante]<<4);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
+			//millis[controlador] = 0;
+			if (sensoroffset[sensor_acelerometro]<=sensor[sensor_acelerometro]){//valores negativos
+				Controlador_P[volante]=sensor[sensor_acelerometro]-sensoroffset[sensor_acelerometro];//Error del controlador
+				canalcontrol[volante] = canal[volante]+(Controlador_P[volante]<<3);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
+				canalcontrol[acelerador] = canal[acelerador]-(Controlador_P[volante]<<1);
+			}else{// valores positivos
+				Controlador_P[volante]=sensoroffset[sensor_acelerometro]-sensor[sensor_acelerometro];//Error del controlador
+				canalcontrol[volante] = canal[volante]-(Controlador_P[volante]<<3);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
+				error_anterior = Controlador_P[volante];
+				canalcontrol[acelerador] = canal[acelerador]-(Controlador_P[volante]<<1);
 			}
-			canalcontrol[acelerador] = canal[acelerador];
 		}
 		if (autonomo){
 			//canalcontrol[volante] = giro(2800,500);
 			//canalcontrol[acelerador] = canaloffset[volante];//adelante(3000,500);//adelante(2000,1000);
 			//funcion de trayectoria
 			ocho();
+		
 			
 		}
 	//Cinematica del robot, valores de 4000 an 8000 con dos variables de control canalcontrol volante y acelerador
