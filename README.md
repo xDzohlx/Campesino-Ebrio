@@ -7,7 +7,7 @@ Ha competido en 4 competencias y actualmente es la versión 3 del robot.
 Talent land 2019
 Primer competencia del campesino
 Tryta 2019
-Al no recivir mucho daño tecnicamente se volvio a contruir y volvio a competir
+Al no recibir mucho daño tecnicamente se volvio a contruir y volvio a competir
 Motorama robot conflict 2020
 Subcampeon del torneo y primer evento internacional donde se compitió
 Norwalk havock robot combat 6 feb 2021
