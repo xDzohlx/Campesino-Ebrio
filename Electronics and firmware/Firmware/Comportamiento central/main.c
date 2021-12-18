@@ -65,6 +65,7 @@
 	volatile bool tercero = true;
 	bool cuarto = false;
 	volatile bool reversa = false;
+	volatile bool control_reversa = false;
 
 	void offsetsignals(){//etapa de autocalibracion por promedio, pequeño filtro digital
 
@@ -167,12 +168,12 @@
 		//Configuracion de CLKPER para fuente de reloj de varios perifericos
 		ccp_write_io((void *) & (CLKCTRL.MCLKCTRLB), (CLKCTRL_PDIV_2X_gc|CLKCTRL_PEN_bm));//Maxima frecuencia de lectura de pwm en señal de reloj per
 			//RTC Reloj de tiempo real
-		while((RTC.STATUS > 0x00 )){}//se checa que no se este uitilizando	el RTC
-		RTC.PER = 0x01A4;//Timer para apagar sistemas autonomos en 7 minutos
-		RTC.CLKSEL = RTC_CLKSEL_INT32K_gc;
-		RTC.DBGCTRL |= RTC_DBGRUN_bm;
-		RTC.CTRLA = RTC_PRESCALER_DIV32768_gc| RTC_RTCEN_bm| RTC_RUNSTDBY_bm;
-		RTC.INTCTRL |= RTC_OVF_bm;//RTC_CMP_bm;
+		//while((RTC.STATUS > 0x00 )){}//se checa que no se este uitilizando	el RTC
+		//RTC.PER = 0x01A4;//Timer para apagar sistemas autonomos en 7 minutos
+		//RTC.CLKSEL = RTC_CLKSEL_INT32K_gc;
+		//RTC.DBGCTRL |= RTC_DBGRUN_bm;
+		//RTC.CTRLA = RTC_PRESCALER_DIV32768_gc| RTC_RTCEN_bm| RTC_RUNSTDBY_bm;
+		//RTC.INTCTRL |= RTC_OVF_bm;//RTC_CMP_bm;
 		//configuracion de puertos
 		PORTA.DIRSET = PIN0_bm|PIN1_bm|PIN2_bm|PIN3_bm;//|PIN4_bm|PIN5_bm|PIN6_bm|PIN7_bm;//dirección de entrada en este caso es de salida
 		//Configuracion de TCA para salida de motores
@@ -233,10 +234,10 @@
 	if (cont > 0)// lectura del canal no es necesario para decodificador
 		canal[cont -1]=TCB0.CCMP;//lectura del canal no necesario para salida decodificada
 		if (cont==2){
-			PORTA.OUTSET = PIN4_bm;
+			PORTA.OUTSET = PIN3_bm;
 		}
 		if (cont==3){
-			PORTA.OUTCLR = PIN4_bm;
+			PORTA.OUTCLR = PIN3_bm;
 		}
 	cont++;//siguiente canal
 	if (canal[cont-2]>16000)
@@ -265,11 +266,11 @@
 			}
 			}
 			if (contfiltro>10){	
-				reversa = false;
+				control_reversa = false;
 				//PORTA.OUTSET = PIN0_bm;
 			}
 			if (contfiltro<5){	
-				reversa = true;
+				control_reversa = true;
 				//PORTA.OUTCLR = PIN0_bm;
 			}
 		if (canal[4]<5000){
@@ -314,15 +315,15 @@
 	ADC0.MUXPOS = contadc;
 	}
 	//Interrupción de reloj de tiempo real de seguridad
-	ISR(RTC_CNT_vect){//Interrupcion por tiempo seguridad
-		//Apagar motores
-		TCA0.SINGLE.CMP1 = canaloffset[acelerador];
-		TCA0.SINGLE.CMP2 = canaloffset[acelerador];
-		while(1){
-		PORTA.OUTTGL = PIN0_bm;//led de aviso
-		_delay_ms(1000);
-		}//se detiene el programa
-	}
+	//ISR(RTC_CNT_vect){//Interrupcion por tiempo seguridad
+		////Apagar motores
+		//TCA0.SINGLE.CMP1 = canaloffset[acelerador];
+		//TCA0.SINGLE.CMP2 = canaloffset[acelerador];
+		//while(1){
+		//PORTA.OUTTGL = PIN0_bm;//led de aviso
+		//_delay_ms(1000);
+		//}//se detiene el programa
+	//}
 	int main(void){
 		setup();
 		while (1){
@@ -333,9 +334,11 @@
 		if (manual){
 			canalcontrol[volante] = canal[volante];// + Controlador_P[0] - Controlador_P [1];
 			canalcontrol[acelerador] = canal[acelerador];
+			reversa = false;
 		}
-		if (asistido){
+		if (autonomo){
 			//millis[controlador] = 0;
+			reversa = control_reversa;
 			if (sensoroffset[sensor_acelerometro]<=sensor[sensor_acelerometro]){//valores negativos
 				Controlador_P[volante]=sensor[sensor_acelerometro]-sensoroffset[sensor_acelerometro];//Error del controlador
 				canalcontrol[volante] = canal[volante]+(Controlador_P[volante]<<4);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
@@ -346,22 +349,22 @@
 				error_anterior = Controlador_P[volante];
 				canalcontrol[acelerador] = canal[acelerador]-(Controlador_P[volante]<<2);
 			}
-			if (sensor[3]>=sensor[2]){
-				sensorcontrol[izquierdo] = sensor[3]-sensor[2];
-				}else{
-				sensorcontrol[izquierdo] = sensor[2]-sensor[3];
-			}
-			if (sensor[0]>=sensor[1]){
-				sensorcontrol[derecho] = sensor[0]-sensor[1];
-				}else{
-				sensorcontrol[derecho] = sensor[1]-sensor[0];
-			}
-			if (sensorcontrol[izquierdo]>90){
-				canalcontrol[volante] -= (sensor[3]<<3);
-			}
-			if (sensorcontrol[derecho]>90){
-				canalcontrol[volante] += (sensor[0]<<3);
-			}
+			//if (sensor[3]>=sensor[2]){
+				//sensorcontrol[izquierdo] = sensor[3]-sensor[2];
+				//}else{
+				//sensorcontrol[izquierdo] = sensor[2]-sensor[3];
+			//}
+			//if (sensor[0]>=sensor[1]){
+				//sensorcontrol[derecho] = sensor[0]-sensor[1];
+				//}else{
+				//sensorcontrol[derecho] = sensor[1]-sensor[0];
+			//}
+			//if (sensorcontrol[izquierdo]>90){
+				//canalcontrol[volante] -= (sensor[3]<<3);
+			//}
+			//if (sensorcontrol[derecho]>90){
+				//canalcontrol[volante] += (sensor[0]<<3);
+			//}
 			
 			//if (sensor[0]>100){//Sensor derecho
 				 //+= 700;
@@ -370,13 +373,14 @@
 				 //-= 700;
 			//}
 		}
-		if (autonomo){
+		if (asistido){
 			//canalcontrol[volante] = giro(2800,500);
 			//canalcontrol[acelerador] = canaloffset[volante];//adelante(3000,500);//adelante(2000,1000);
 			//funcion de trayectoria
-			ocho();
-		
-			
+			//ocho();
+			canalcontrol[volante] = canal[volante];// + Controlador_P[0] - Controlador_P [1];
+			canalcontrol[acelerador] = canal[acelerador];
+			reversa = true;
 		}
 	//Cinematica del robot, valores de 4000 an 8000 con dos variables de control canalcontrol volante y acelerador
 	if(!reversa){//reversa con sensor
