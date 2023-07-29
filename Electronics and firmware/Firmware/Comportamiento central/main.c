@@ -6,22 +6,32 @@
 	 */ 
 
 	#define F_CPU 16000000UL //Frecuencia del cpu 16 MHz
+	#define USART0_BAUD_RATE(BAUD_RATE) ((float)(F_CPU * 32 / (16 * (float)BAUD_RATE)) + 0.5)
 	#define Kp 32
 	#define D 10
 	#define acelerador 1
 	#define volante 0
 	#define arma 3
+	#define seleccion 4
 	#define izquierdo 0
 	#define derecho 1
 	#define sensor_reversa 4
 	#define sensor_acelerometro 5
 	#define controlador 3
 
+	#define CPPM false
+	#define calibracion true
+	
 	#include <avr/io.h>
 	#include <avr/interrupt.h>
 	#include <avr/cpufunc.h>
 	#include <stdbool.h>
 	#include <util/delay.h>
+	
+	void USART0_init(void);
+	char USART0_readChar(void);
+	//uint8_t softwareid  __attribute__ ((.noinit)) = 0x01;
+
 
 	uint8_t cont = 0;//Contador de canal
 	uint8_t contadc = 0;//Contador de sensores
@@ -40,6 +50,16 @@
 	volatile uint16_t sensor[16];
 	volatile uint16_t motor[2];//motor 0 izquid, motor 1 derecho
 	volatile uint16_t automatico[2];
+	
+	//RC canales SBUS
+	
+	volatile static uint8_t sbuschannel[25];
+	volatile static uint8_t sbuschannelindex = 0;
+	volatile static uint8_t buffer_sbus = 0x00;
+	volatile static uint8_t sbus_anterior = 0x00;
+	volatile static uint16_t nuevo_canal[25];
+	volatile static bool fin_recepcion = false;
+	
 	
 	uint16_t controlautomatico[2];
 	uint16_t controlautomaticoprevio[2];
@@ -68,7 +88,8 @@
 	volatile bool control_reversa = false;
 
 	void offsetsignals(){//etapa de autocalibracion por promedio, pequeño filtro digital
-
+	PORTA.DIRCLR = PIN0_bm;
+	PORTF.OUTSET = PIN0_bm|PIN1_bm|PIN2_bm|PIN3_bm;
 		while (!lectura_canal&&canal[acelerador]<6500&&canal[acelerador]>5500&&canal[volante]<6500&&canal[volante]>5500){//Seguridad
 		}
 		_delay_ms(1500);
@@ -81,6 +102,8 @@
 		sensoroffset[sensor_acelerometro] = (sensoroffset[sensor_acelerometro]>>3);
 		canaloffset[volante] = (canaloffset[volante]>>3);//division del promedio
 		canaloffset[acelerador] = (canaloffset[acelerador]>>3);
+	PORTF.OUTCLR = PIN0_bm|PIN1_bm|PIN2_bm|PIN3_bm;
+	PORTA.DIRSET = PIN0_bm;
 	}
 	//generador de trayectorias, falta el parametro de velocidad mientras tanto sera fija
 	//valores de 4000 a 2000
@@ -163,6 +186,30 @@
 			contador = 0;
 		}
 	}
+	
+	char USART0_readChar(void)
+	{
+		while (!(USART0.STATUS & USART_RXCIF_bm))
+		{
+			;
+		}
+		return USART0.RXDATAL;
+	}
+	
+	void USART0_init(void)
+	{
+		//PORTA.DIR &= ~PIN1_bm;
+		//PORTA.DIR |= PIN0_bm;
+		
+		USART1.BAUD = (uint16_t)USART0_BAUD_RATE(100000);
+
+		USART1.CTRLA |= USART_RXCIE_bm;
+
+		USART1.CTRLB |= USART_RXEN_bm;
+		
+		USART1.CTRLC |= USART_PMODE_EVEN_gc|USART_SBMODE_2BIT_gc;
+	}
+	
 	void setup(void){
 	
 		//Configuracion de CLKPER para fuente de reloj de varios perifericos
@@ -175,7 +222,11 @@
 		//RTC.CTRLA = RTC_PRESCALER_DIV32768_gc| RTC_RTCEN_bm| RTC_RUNSTDBY_bm;
 		//RTC.INTCTRL |= RTC_OVF_bm;//RTC_CMP_bm;
 		//configuracion de puertos
-		PORTA.DIRSET = PIN0_bm|PIN1_bm|PIN2_bm|PIN3_bm;//|PIN4_bm|PIN5_bm|PIN6_bm|PIN7_bm;//dirección de entrada en este caso es de salida
+		
+		PORTA.DIRSET = PIN1_bm|PIN0_bm|PIN2_bm|PIN3_bm;//PIN1_bm|PIN0_bm|PIN4_bm|PIN5_bm|PIN6_bm|PIN7_bm;//dirección de entrada en este caso es de salida
+		//PORTA.DIRCLR = PIN1_bm;
+		PORTC.DIRCLR = PIN1_bm;
+		PORTF.DIRSET = PIN0_bm|PIN1_bm|PIN2_bm|PIN3_bm;
 		//Configuracion de TCA para salida de motores
 		TCB0.CTRLA |= TCB_ENABLE_bm|TCB_CLKSEL_CLKDIV2_gc;//ACTIVACION DE EVENTOS RELOJ PROVIENE DE TCA A 1MHZ //clkper 
 		TCB0.CTRLB |= TCB_CNTMODE_FRQ_gc;//modo de lectura de frecuencia
@@ -189,9 +240,12 @@
 		TCB2.CTRLA |= TCB_ENABLE_bm|TCB_CLKSEL_CLKDIV2_gc;
 		TCB2.CCMP = 0xFFFE;//Valor top 4000 interrupcion cada 10 milisegundos
 		TCB2.INTCTRL |= TCB_CAPT_bm;//habilita la interrupcion
+		//USART SBUS PARA RC
+		USART0_init();
 		//CONFIGURACION DE RED DE EVENTOS
 		//Configuracion de sistema de eventos para el radio
-		EVSYS.CHANNEL2 |= EVSYS_GENERATOR_PORT0_PIN0_gc;//PORTC3 CONECTADO A CANAL 2 para lectura de ppm
+		EVSYS.CHANNEL2 |= EVSYS_GENERATOR_PORT0_PIN0_gc;//PORTC0 CONECTADO A CANAL 2 para lectura de ppm
+		
 		EVSYS.USERTCB0 |= EVSYS_CHANNEL_CHANNEL2_gc;//usuario TCB0 conectado al canal 2
 		//Configuracion de sistema de eventos para sensor de reversa con filtro
 		EVSYS.CHANNEL0 |= EVSYS_GENERATOR_PORT0_PIN3_gc;//PORTA3 conectado a canal 0 para sensor de reversa
@@ -211,11 +265,12 @@
 		ADC0.COMMAND |= ADC_STCONV_bm;//INICIO DE MUESTRAS
 
 		//timer TCA
-		TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV1_gc;//fuente de reloj,
-		TCA0.SINGLE.PER = 0x07EF;//Selección de resolucion de pwm y periodo total de pwm
-		TCA0.SINGLE.CTRLB |= TCA_SINGLE_CMP2_bm|TCA_SINGLE_CMP1EN_bm|TCA_SINGLE_WGMODE_SINGLESLOPE_gc;//Habilitar comparador y seleccion de modo de de generacion de onda con modo de rampa sensilla
-		TCA0.SINGLE.CMP1 = 0x3E0;//registro de 16 bits para comparacion y pediodo de pwm
-		TCA0.SINGLE.CMP2 = 0x3E0;
+		TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV8_gc;//fuente de reloj,
+		TCA0.SINGLE.PER = 0x4E20;//Selección de resolucion de pwm y periodo total de pwm
+		TCA0.SINGLE.CTRLB |= TCA_SINGLE_CMP1_bm|TCA_SINGLE_CMP2_bm|TCA_SINGLE_WGMODE_SINGLESLOPE_gc;//Habilitar comparador y seleccion de modo de de generacion de onda con modo de rampa sensilla|TCA_SINGLE_CMP1EN_bm
+		//TCA0.SINGLE.CMP1 = 0x3E0;//registro de 16 bits para comparacion y pediodo de pwm
+		TCA0.SINGLE.CMP2 = 0x5DC;
+		TCA0.SINGLE.CMP1 = 0x5DC;
 		TCA0.SINGLE.CTRLA |= TCA_SINGLE_ENABLE_bm;//Habilitar pwm
 
 		//configuracion de vector de interrupcion
@@ -223,27 +278,36 @@
 		CPUINT.LVL1VEC = TCB0_INT_vect_num;	
 		//Habilitar interrupciones generales
 		sei();
+		#if calibracion
+		
 		_delay_ms(1500);//parpadeo para ver el encendido
+		
 		offsetsignals();// se obtiene el offset por promedio, de 8 valores por comodidad
 		controlautomatico[volante] = canaloffset[volante];
 		controlautomatico[acelerador] = canaloffset[acelerador];
+		
+		#endif
+		
+		
 		PORTA.OUTSET = PIN0_bm;//Termino la configuracion
 	}
-	//Interrupción de lectura de RC
+	//Interrupción de lectura de RC	
+#if CPPM== true
 	ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
 	if (cont > 0)// lectura del canal no es necesario para decodificador
 		canal[cont -1]=TCB0.CCMP;//lectura del canal no necesario para salida decodificada
-		if (cont==2){
-			PORTA.OUTSET = PIN3_bm;
-		}
-		if (cont==3){
-			PORTA.OUTCLR = PIN3_bm;
-		}
+		//if (cont==2){
+			//PORTA.OUTSET = PIN3_bm;
+		//}
+		//if (cont==3){
+			//PORTA.OUTCLR = PIN3_bm;
+		//}
 	cont++;//siguiente canal
 	if (canal[cont-2]>16000)
 		cont = 0;
 		lectura_canal = true;
-	}
+	}	
+#endif
 	//Interrupción de contador de milisegundos
 	ISR(TCB1_INT_vect){//contador de milisegundos, para generador de trayectorias
 		millis[acelerador]++;
@@ -281,7 +345,7 @@
 		segundo = true;
 		tercero = true;
 		cuarto = false;
-		PORTA.OUTCLR= PIN0_bm;//led de aviso
+		//PORTA.OUTCLR= PIN0_bm;//led de aviso//descomentar despues
 		}
 		
 		if (canal[4]<6500&&canal[4]>5500){
@@ -291,7 +355,7 @@
 			currentmillis = millis[acelerador];
 			if (currentmillis - previousmillis >= 250) {
 				previousmillis = currentmillis;
-				PORTA.OUTTGL = PIN0_bm;
+				//PORTA.OUTTGL = PIN0_bm;
 			}
 		}
 		
@@ -299,7 +363,7 @@
 		manual = false;
 		asistido = false;
 		autonomo = true;
-			PORTA.OUTSET = PIN0_bm;
+			//PORTA.OUTSET = PIN0_bm;
 		}
 		TCB2.INTFLAGS &= ~TCB_CAPT_bp;
 	}
@@ -314,6 +378,30 @@
 		}
 	ADC0.MUXPOS = contadc;
 	}
+	//Interrupcion USART
+	ISR(USART1_RXC_vect){
+		
+		buffer_sbus = (uint8_t)USART1.RXDATAL;
+		sbuschannelindex++;
+		if((buffer_sbus == 0x0F)&&(sbus_anterior== 0x00)){
+			sbuschannelindex = 0x00;
+		}
+		sbuschannel[sbuschannelindex] = buffer_sbus;
+		if (sbuschannelindex==2)
+		{	
+			canal[volante] = sbuschannel[1] + ((sbuschannel[2]&0x07)<<8);
+		}
+		if (sbuschannelindex==3)
+		{
+			canal[acelerador] = ((sbuschannel[3]&0x3F)<<5) + ((sbuschannel[2]&0xF8)>>3);
+		}
+		if (sbuschannelindex==4)
+		{
+			canal[arma] = ((sbuschannel[3]&0x3F)<<5) + ((sbuschannel[2]&0xF8)>>3);
+		}
+		sbus_anterior = buffer_sbus;
+		//nuevo_canal[sbuschannelindex] = sbuschannel[sbuschannelindex];
+	}
 	//Interrupción de reloj de tiempo real de seguridad
 	//ISR(RTC_CNT_vect){//Interrupcion por tiempo seguridad
 		////Apagar motores
@@ -324,6 +412,7 @@
 		//_delay_ms(1000);
 		//}//se detiene el programa
 	//}
+	
 	int main(void){
 		setup();
 		while (1){
@@ -331,57 +420,48 @@
 	//motores aceptan valores de 1000 a 2000 punto medio de 1500
 	//ajuste de señal de lectura para señal de motores
 	//salida de motore
-		if (manual){
+	
+	#ifdef decodificador 
+		while(1){
+			////if (nuevo_canal[3]>1000){
+			//////PORTA.OUTSET = PIN0_bm;
+			////}else{
+			//////PORTA.OUTCLR = PIN0_bm;
+			////}
+			TCA0.SINGLE.CMP1 = nuevo_canal[3]+500;
+			TCA0.SINGLE.CMP2 = nuevo_canal[4]+500;
+		}
+	#endif
+
+	
+		if (1){//manual
 			canalcontrol[volante] = canal[volante];// + Controlador_P[0] - Controlador_P [1];
 			canalcontrol[acelerador] = canal[acelerador];
 			reversa = false;
 		}
-		if (autonomo){
-			//millis[controlador] = 0;
-			reversa = control_reversa;
-			if (sensoroffset[sensor_acelerometro]<=sensor[sensor_acelerometro]){//valores negativos
-				Controlador_P[volante]=sensor[sensor_acelerometro]-sensoroffset[sensor_acelerometro];//Error del controlador
-				canalcontrol[volante] = canal[volante]+(Controlador_P[volante]<<4);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
-				canalcontrol[acelerador] = canal[acelerador]-(Controlador_P[volante]<<2);	
-			}else{// valores positivos
-				Controlador_P[volante]=sensoroffset[sensor_acelerometro]-sensor[sensor_acelerometro];//Error del controlador
-				canalcontrol[volante] = canal[volante]-(Controlador_P[volante]<<4);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
-				error_anterior = Controlador_P[volante];
-				canalcontrol[acelerador] = canal[acelerador]-(Controlador_P[volante]<<2);
-			}
-			//if (sensor[3]>=sensor[2]){
-				//sensorcontrol[izquierdo] = sensor[3]-sensor[2];
-				//}else{
-				//sensorcontrol[izquierdo] = sensor[2]-sensor[3];
+		//if (autonomo){
+			////millis[controlador] = 0;
+			//reversa = control_reversa;
+			//if (sensoroffset[sensor_acelerometro]<=sensor[sensor_acelerometro]){//valores negativos
+				//Controlador_P[volante]=sensor[sensor_acelerometro]-sensoroffset[sensor_acelerometro];//Error del controlador
+				//canalcontrol[volante] = canal[volante]+(Controlador_P[volante]<<4);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
+				//canalcontrol[acelerador] = canal[acelerador]-(Controlador_P[volante]<<2);	
+			//}else{// valores positivos
+				//Controlador_P[volante]=sensoroffset[sensor_acelerometro]-sensor[sensor_acelerometro];//Error del controlador
+				//canalcontrol[volante] = canal[volante]-(Controlador_P[volante]<<4);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
+				//error_anterior = Controlador_P[volante];
+				//canalcontrol[acelerador] = canal[acelerador]-(Controlador_P[volante]<<2);
 			//}
-			//if (sensor[0]>=sensor[1]){
-				//sensorcontrol[derecho] = sensor[0]-sensor[1];
-				//}else{
-				//sensorcontrol[derecho] = sensor[1]-sensor[0];
-			//}
-			//if (sensorcontrol[izquierdo]>90){
-				//canalcontrol[volante] -= (sensor[3]<<3);
-			//}
-			//if (sensorcontrol[derecho]>90){
-				//canalcontrol[volante] += (sensor[0]<<3);
-			//}
-			
-			//if (sensor[0]>100){//Sensor derecho
-				 //+= 700;
-			//}
-			//if (sensor[3]>100){//sensor izquierdo
-				 //-= 700;
-			//}
-		}
-		if (asistido){
-			//canalcontrol[volante] = giro(2800,500);
-			//canalcontrol[acelerador] = canaloffset[volante];//adelante(3000,500);//adelante(2000,1000);
-			//funcion de trayectoria
-			//ocho();
-			canalcontrol[volante] = canal[volante];// + Controlador_P[0] - Controlador_P [1];
-			canalcontrol[acelerador] = canal[acelerador];
-			reversa = true;
-		}
+		//}
+		//if (asistido){
+			////canalcontrol[volante] = giro(2800,500);
+			////canalcontrol[acelerador] = canaloffset[volante];//adelante(3000,500);//adelante(2000,1000);
+			////funcion de trayectoria
+			////ocho();
+			//canalcontrol[volante] = canal[volante];// + Controlador_P[0] - Controlador_P [1];
+			//canalcontrol[acelerador] = canal[acelerador];
+			//reversa = true;
+		//}
 	//Cinematica del robot, valores de 4000 an 8000 con dos variables de control canalcontrol volante y acelerador
 	if(!reversa){//reversa con sensor
 		if (canalcontrol[volante]>=canaloffset[volante]){
