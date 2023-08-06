@@ -12,16 +12,12 @@
 	#define acelerador 1
 	#define volante 0
 	#define arma 3
-	#define seleccion 4
 	#define izquierdo 0
 	#define derecho 1
 	#define sensor_reversa 4
 	#define sensor_acelerometro 5
 	#define controlador 3
 
-	#define CPPM false
-	#define calibracion true
-	
 	#include <avr/io.h>
 	#include <avr/interrupt.h>
 	#include <avr/cpufunc.h>
@@ -225,13 +221,12 @@
 		
 		PORTA.DIRSET = PIN1_bm|PIN0_bm|PIN2_bm|PIN3_bm;//PIN1_bm|PIN0_bm|PIN4_bm|PIN5_bm|PIN6_bm|PIN7_bm;//dirección de entrada en este caso es de salida
 		//PORTA.DIRCLR = PIN1_bm;
-		PORTC.DIRCLR = PIN1_bm;
 		PORTF.DIRSET = PIN0_bm|PIN1_bm|PIN2_bm|PIN3_bm;
 		//Configuracion de TCA para salida de motores
-		TCB0.CTRLA |= TCB_ENABLE_bm|TCB_CLKSEL_CLKDIV2_gc;//ACTIVACION DE EVENTOS RELOJ PROVIENE DE TCA A 1MHZ //clkper 
-		TCB0.CTRLB |= TCB_CNTMODE_FRQ_gc;//modo de lectura de frecuencia
-		TCB0.EVCTRL |= TCB_CAPTEI_bm|TCB_EDGE_bm;//ACTIVA CAPTURA DE EVENTOS, EDGE es el sentido del pulso en este caso esta inverso
-		TCB0.INTCTRL |= TCB_CAPT_bm;
+		//TCB0.CTRLA |= TCB_ENABLE_bm|TCB_CLKSEL_CLKDIV2_gc;//ACTIVACION DE EVENTOS RELOJ PROVIENE DE TCA A 1MHZ //clkper 
+		//TCB0.CTRLB |= TCB_CNTMODE_FRQ_gc;//modo de lectura de frecuencia
+		//TCB0.EVCTRL |= TCB_CAPTEI_bm|TCB_EDGE_bm;//ACTIVA CAPTURA DE EVENTOS, EDGE es el sentido del pulso en este caso esta inverso
+		//TCB0.INTCTRL |= TCB_CAPT_bm;
 		//TCB1.CTRLB |= 0;//modo de tiempo fuera
 		TCB1.CTRLA |= TCB_ENABLE_bm;
 		TCB1.CCMP = 0xFA0;//Valor top 4000 interrupcion cada milisegundo
@@ -267,10 +262,11 @@
 		//timer TCA
 		TCA0.SINGLE.CTRLA |= TCA_SINGLE_CLKSEL_DIV8_gc;//fuente de reloj,
 		TCA0.SINGLE.PER = 0x4E20;//Selección de resolucion de pwm y periodo total de pwm
-		TCA0.SINGLE.CTRLB |= TCA_SINGLE_CMP1_bm|TCA_SINGLE_CMP2_bm|TCA_SINGLE_WGMODE_SINGLESLOPE_gc;//Habilitar comparador y seleccion de modo de de generacion de onda con modo de rampa sensilla|TCA_SINGLE_CMP1EN_bm
+		TCA0.SINGLE.CTRLB |= TCA_SINGLE_CMP1EN_bm|TCA_SINGLE_CMP0_bm|TCA_SINGLE_CMP2_bm|TCA_SINGLE_WGMODE_SINGLESLOPE_gc;//Habilitar comparador y seleccion de modo de de generacion de onda con modo de rampa sensilla|TCA_SINGLE_CMP1EN_bm
 		//TCA0.SINGLE.CMP1 = 0x3E0;//registro de 16 bits para comparacion y pediodo de pwm
-		TCA0.SINGLE.CMP2 = 0x5DC;
-		TCA0.SINGLE.CMP1 = 0x5DC;
+		TCA0.SINGLE.CMP2 = 0x3E8;
+		TCA0.SINGLE.CMP1 = 0x3E8;
+		TCA0.SINGLE.CMP0 = 0x3E8;
 		TCA0.SINGLE.CTRLA |= TCA_SINGLE_ENABLE_bm;//Habilitar pwm
 
 		//configuracion de vector de interrupcion
@@ -278,36 +274,30 @@
 		CPUINT.LVL1VEC = TCB0_INT_vect_num;	
 		//Habilitar interrupciones generales
 		sei();
-		#if calibracion
 		
-		_delay_ms(1500);//parpadeo para ver el encendido
+		_delay_ms(2000);//parpadeo para ver el encendido
 		
 		offsetsignals();// se obtiene el offset por promedio, de 8 valores por comodidad
 		controlautomatico[volante] = canaloffset[volante];
 		controlautomatico[acelerador] = canaloffset[acelerador];
 		
-		#endif
-		
-		
 		PORTA.OUTSET = PIN0_bm;//Termino la configuracion
 	}
-	//Interrupción de lectura de RC	
-#if CPPM== true
-	ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
-	if (cont > 0)// lectura del canal no es necesario para decodificador
-		canal[cont -1]=TCB0.CCMP;//lectura del canal no necesario para salida decodificada
-		//if (cont==2){
-			//PORTA.OUTSET = PIN3_bm;
-		//}
-		//if (cont==3){
-			//PORTA.OUTCLR = PIN3_bm;
-		//}
-	cont++;//siguiente canal
-	if (canal[cont-2]>16000)
-		cont = 0;
-		lectura_canal = true;
-	}	
-#endif
+	//Interrupción de lectura de RC
+	//ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
+	//if (cont > 0)// lectura del canal no es necesario para decodificador
+		//canal[cont -1]=TCB0.CCMP;//lectura del canal no necesario para salida decodificada
+		////if (cont==2){
+			////PORTA.OUTSET = PIN3_bm;
+		////}
+		////if (cont==3){
+			////PORTA.OUTCLR = PIN3_bm;
+		////}
+	//cont++;//siguiente canal
+	//if (canal[cont-2]>16000)
+		//cont = 0;
+		//lectura_canal = true;
+	//}
 	//Interrupción de contador de milisegundos
 	ISR(TCB1_INT_vect){//contador de milisegundos, para generador de trayectorias
 		millis[acelerador]++;
@@ -355,7 +345,7 @@
 			currentmillis = millis[acelerador];
 			if (currentmillis - previousmillis >= 250) {
 				previousmillis = currentmillis;
-				//PORTA.OUTTGL = PIN0_bm;
+				PORTA.OUTTGL = PIN0_bm;
 			}
 		}
 		
@@ -363,7 +353,7 @@
 		manual = false;
 		asistido = false;
 		autonomo = true;
-			//PORTA.OUTSET = PIN0_bm;
+			PORTA.OUTSET = PIN0_bm;
 		}
 		TCB2.INTFLAGS &= ~TCB_CAPT_bp;
 	}
@@ -388,12 +378,12 @@
 		}
 		sbuschannel[sbuschannelindex] = buffer_sbus;
 		if (sbuschannelindex==2)
-		{	
-			canal[volante] = sbuschannel[1] + ((sbuschannel[2]&0x07)<<8);
+		{
+			canal[volante] = sbuschannel[1] + ((sbuschannel[2]&0x07)<<8) + 500;//offset de 500 para valor medio
 		}
 		if (sbuschannelindex==3)
 		{
-			canal[acelerador] = ((sbuschannel[3]&0x3F)<<5) + ((sbuschannel[2]&0xF8)>>3);
+			canal[acelerador] = ((sbuschannel[3]&0x3F)<<5) + ((sbuschannel[2]&0xF8)>>3) + 500;//offset de 500 para valor medio
 		}
 		if (sbuschannelindex==4)
 		{
@@ -420,48 +410,72 @@
 	//motores aceptan valores de 1000 a 2000 punto medio de 1500
 	//ajuste de señal de lectura para señal de motores
 	//salida de motore
+	while(1){
+				////if (nuevo_canal[3]>1000){
+					//////PORTA.OUTSET = PIN0_bm;
+					////}else{
+					//////PORTA.OUTCLR = PIN0_bm;
+				////}
+				TCA0.SINGLE.CMP1 = (canal[volante])+500;
+				TCA0.SINGLE.CMP2 = (canal[acelerador])+500;
+							//motor[izquierdo] = (canal[volante]>>1)+500;
+							//motor[derecho] = (canal[acelerador]>>1)+500;
+							//reversa = false;
+	}
 	
-	#ifdef decodificador 
-		while(1){
-			////if (nuevo_canal[3]>1000){
-			//////PORTA.OUTSET = PIN0_bm;
-			////}else{
-			//////PORTA.OUTCLR = PIN0_bm;
-			////}
-			TCA0.SINGLE.CMP1 = nuevo_canal[3]+500;
-			TCA0.SINGLE.CMP2 = nuevo_canal[4]+500;
-		}
-	#endif
-
-	
-		if (1){//manual
+		if (1){
 			canalcontrol[volante] = canal[volante];// + Controlador_P[0] - Controlador_P [1];
 			canalcontrol[acelerador] = canal[acelerador];
 			reversa = false;
 		}
-		//if (autonomo){
-			////millis[controlador] = 0;
-			//reversa = control_reversa;
-			//if (sensoroffset[sensor_acelerometro]<=sensor[sensor_acelerometro]){//valores negativos
-				//Controlador_P[volante]=sensor[sensor_acelerometro]-sensoroffset[sensor_acelerometro];//Error del controlador
-				//canalcontrol[volante] = canal[volante]+(Controlador_P[volante]<<4);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
-				//canalcontrol[acelerador] = canal[acelerador]-(Controlador_P[volante]<<2);	
-			//}else{// valores positivos
-				//Controlador_P[volante]=sensoroffset[sensor_acelerometro]-sensor[sensor_acelerometro];//Error del controlador
-				//canalcontrol[volante] = canal[volante]-(Controlador_P[volante]<<4);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
-				//error_anterior = Controlador_P[volante];
-				//canalcontrol[acelerador] = canal[acelerador]-(Controlador_P[volante]<<2);
+		if (0){//autonomo
+			//millis[controlador] = 0;
+			reversa = control_reversa;
+			if (sensoroffset[sensor_acelerometro]<=sensor[sensor_acelerometro]){//valores negativos
+				Controlador_P[volante]=sensor[sensor_acelerometro]-sensoroffset[sensor_acelerometro];//Error del controlador
+				canalcontrol[volante] = canal[volante]+(Controlador_P[volante]<<4);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
+				canalcontrol[acelerador] = canal[acelerador]-(Controlador_P[volante]<<2);	
+			}else{// valores positivos
+				Controlador_P[volante]=sensoroffset[sensor_acelerometro]-sensor[sensor_acelerometro];//Error del controlador
+				canalcontrol[volante] = canal[volante]-(Controlador_P[volante]<<4);//canal[volante] + Controlador_P[0] - Controlador_P [1];	
+				error_anterior = Controlador_P[volante];
+				canalcontrol[acelerador] = canal[acelerador]-(Controlador_P[volante]<<2);
+			}
+			/*
+			//if (sensor[3]>=sensor[2]){
+				//sensorcontrol[izquierdo] = sensor[3]-sensor[2];
+				//}else{
+				//sensorcontrol[izquierdo] = sensor[2]-sensor[3];
 			//}
-		//}
-		//if (asistido){
-			////canalcontrol[volante] = giro(2800,500);
-			////canalcontrol[acelerador] = canaloffset[volante];//adelante(3000,500);//adelante(2000,1000);
-			////funcion de trayectoria
-			////ocho();
-			//canalcontrol[volante] = canal[volante];// + Controlador_P[0] - Controlador_P [1];
-			//canalcontrol[acelerador] = canal[acelerador];
-			//reversa = true;
-		//}
+			//if (sensor[0]>=sensor[1]){
+				//sensorcontrol[derecho] = sensor[0]-sensor[1];
+				//}else{
+				//sensorcontrol[derecho] = sensor[1]-sensor[0];
+			//}
+			//if (sensorcontrol[izquierdo]>90){
+				//canalcontrol[volante] -= (sensor[3]<<3);
+			//}
+			//if (sensorcontrol[derecho]>90){
+				//canalcontrol[volante] += (sensor[0]<<3);
+			//}
+			
+			//if (sensor[0]>100){//Sensor derecho
+				 //+= 700;
+			//}
+			//if (sensor[3]>100){//sensor izquierdo
+				 //-= 700;
+			//}
+			*/
+		}
+		if (0){//asistido
+			//canalcontrol[volante] = giro(2800,500);
+			//canalcontrol[acelerador] = canaloffset[volante];//adelante(3000,500);//adelante(2000,1000);
+			//funcion de trayectoria
+			//ocho();
+			canalcontrol[volante] = canal[volante];// + Controlador_P[0] - Controlador_P [1];
+			canalcontrol[acelerador] = canal[acelerador];
+			reversa = true;
+		}
 	//Cinematica del robot, valores de 4000 an 8000 con dos variables de control canalcontrol volante y acelerador
 	if(!reversa){//reversa con sensor
 		if (canalcontrol[volante]>=canaloffset[volante]){
