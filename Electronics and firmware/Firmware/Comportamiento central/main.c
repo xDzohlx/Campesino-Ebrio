@@ -72,6 +72,7 @@
 	uint16_t nuevomillis = 0;
 	uint8_t contfiltro = 0x00;
 	uint8_t numsensor = 0;
+	char dato_uart = 0x00;
 	volatile uint8_t sensorcontrol[2];
 	volatile bool manual = true;//0 sin asistencia, 1 asistencia, 2 autonomo
 	volatile bool asistido = false;
@@ -200,7 +201,7 @@
 	void USART1_init(void)
 	{
 		//PORTA.DIR &= ~PIN1_bm;
-		//PORTA.DIR |= PIN0_bm;
+		//PORTC.DIR |= PIN0_bm;
 		
 		USART1.BAUD = (uint16_t)USART0_BAUD_RATE(100000);
 
@@ -243,7 +244,7 @@ void USART0_init(void)
 		//RTC.INTCTRL |= RTC_OVF_bm;//RTC_CMP_bm;
 		//configuracion de puertos
 		
-		PORTA.DIRSET = PIN1_bm|PIN0_bm|PIN2_bm|PIN3_bm;//PIN1_bm|PIN0_bm|PIN4_bm|PIN5_bm|PIN6_bm|PIN7_bm;//dirección de entrada en este caso es de salida
+		PORTA.DIRSET = PIN0_bm|PIN1_bm|PIN0_bm|PIN2_bm|PIN3_bm;//PIN1_bm|PIN0_bm|PIN4_bm|PIN5_bm|PIN6_bm|PIN7_bm;//dirección de entrada en este caso es de salida
 		//PORTA.DIRCLR = PIN1_bm;
 		PORTF.DIRSET = PIN0_bm|PIN1_bm|PIN2_bm|PIN3_bm;
 		
@@ -264,6 +265,7 @@ void USART0_init(void)
 		TCB2.CCMP = 0xFFFE;//Valor top 4000 interrupcion cada 10 milisegundos
 		TCB2.INTCTRL |= TCB_CAPT_bm;//habilita la interrupcion
 		//USART SBUS PARA RC
+		USART0_init();
 		USART1_init();
 		//CONFIGURACION DE RED DE EVENTOS
 		//Configuracion de sistema de eventos para el radio
@@ -317,7 +319,7 @@ void USART0_init(void)
 		controlautomatico[volante] = canaloffset[volante];
 		controlautomatico[acelerador] = canaloffset[acelerador];
 		
-		PORTA.OUTSET = PIN0_bm;//Termino la configuracion
+		//PORTA.OUTSET = PIN0_bm;//Termino la configuracion
 	}
 	//Interrupción de lectura de RC
 	//ISR(TCB0_INT_vect){//Interrupcion de lecutra y decodificacion de ppm
@@ -401,7 +403,7 @@ void USART0_init(void)
 			currentmillis = millis[acelerador];
 			if (currentmillis - previousmillis >= 250) {
 				previousmillis = currentmillis;
-				PORTA.OUTTGL = PIN0_bm;
+				//PORTA.OUTTGL = PIN0_bm;
 			}
 		}
 		
@@ -409,7 +411,7 @@ void USART0_init(void)
 		manual = false;
 		asistido = false;
 		autonomo = true;
-			PORTA.OUTSET = PIN0_bm;
+			//PORTA.OUTSET = PIN0_bm;
 		}
 		TCB2.INTFLAGS &= ~TCB_CAPT_bp;
 	}
@@ -536,7 +538,9 @@ void USART0_init(void)
 			TCA0.SINGLE.CMP1 = motor[izquierdo];
 			TCA0.SINGLE.CMP2 = motor[derecho];
 			
-			//USART0_sendChar('A');
-			//USART0_sendChar('\n');
+			dato_uart = (char)(canal[volante]<<3);
+			
+			USART0_sendChar(dato_uart);
+			USART0_sendChar('\n');
 	}//while(1)
 	}//main
