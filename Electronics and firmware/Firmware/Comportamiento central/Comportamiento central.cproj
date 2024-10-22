@@ -28,14 +28,14 @@
     <ResetRule>0</ResetRule>
     <eraseonlaunchrule>0</eraseonlaunchrule>
     <EraseKey />
-    <avrtool>com.atmel.avrdbg.tool.pickit4</avrtool>
-    <avrtoolserialnumber>BUR203614421</avrtoolserialnumber>
+    <avrtool>com.atmel.avrdbg.tool.snap</avrtool>
+    <avrtoolserialnumber>BUR184673061</avrtoolserialnumber>
     <avrdeviceexpectedsignature>0x1E9650</avrdeviceexpectedsignature>
     <avrtoolinterface>UPDI</avrtoolinterface>
     <com_atmel_avrdbg_tool_pickit4>
       <ToolOptions>
         <InterfaceProperties>
-          <UpdiClock>750000</UpdiClock>
+          <UpdiClock>0</UpdiClock>
         </InterfaceProperties>
         <InterfaceName>UPDI</InterfaceName>
       </ToolOptions>
@@ -56,6 +56,17 @@
         </dependencies>
       </framework-data>
     </AsfFrameworkConfig>
+    <com_atmel_avrdbg_tool_snap>
+      <ToolOptions>
+        <InterfaceProperties>
+          <UpdiClock>750000</UpdiClock>
+        </InterfaceProperties>
+        <InterfaceName>UPDI</InterfaceName>
+      </ToolOptions>
+      <ToolType>com.atmel.avrdbg.tool.snap</ToolType>
+      <ToolNumber>BUR184673061</ToolNumber>
+      <ToolName>MPLAB® Snap</ToolName>
+    </com_atmel_avrdbg_tool_snap>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
     <ToolchainSettings>
